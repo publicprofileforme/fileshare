@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fileshare · receive</title>
+<style>
+:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54;--success:#437a22;--drop-bg:#e8f4f4}
+[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b;--success:#6daa45;--drop-bg:#1c2b2c}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;font-size:15px;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:500px;display:flex;flex-direction:column;gap:1.5rem}
+h1{font-size:1.25rem;font-weight:600;display:flex;align-items:center;gap:.6rem}
+.badge{font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:99px;background:var(--success);color:#fff;letter-spacing:.05em}
+.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:2.5rem 1.5rem;text-align:center;cursor:pointer;transition:background .18s,border-color .18s;display:flex;flex-direction:column;align-items:center;gap:.8rem;color:var(--muted)}
+.drop-zone.over{background:var(--drop-bg);border-color:var(--primary);color:var(--primary)}
+.drop-zone input[type="file"]{display:none}
+.drop-icon{color:var(--primary)}
+.file-list{list-style:none;display:flex;flex-direction:column;gap:.4rem}
+.file-list li{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.6rem .9rem;font-size:.9rem;display:flex;justify-content:space-between;align-items:center}
+.file-list .name{word-break:break-all}
+.file-list .sz{color:var(--muted);font-size:.8rem;white-space:nowrap;margin-left:.5rem}
+.btn{border:none;border-radius:8px;padding:.7rem 1.2rem;font-size:.9rem;font-weight:600;cursor:pointer;transition:background .18s;background:var(--primary);color:#fff;width:100%}
+.btn:hover{background:var(--primary-h)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.result{padding:.8rem 1rem;border-radius:8px;font-size:.9rem;display:none}
+.result.ok{background:color-mix(in oklch,var(--success) 12%,var(--surface));border:1px solid color-mix(in oklch,var(--success) 30%,var(--border));color:var(--success)}
+.result.err{background:color-mix(in oklch,#a12c7b 12%,var(--surface));border:1px solid color-mix(in oklch,#a12c7b 30%,var(--border));color:#d163a7}
+.progress-bar{height:4px;background:var(--border);border-radius:99px;overflow:hidden;display:none}
+.progress-fill{height:100%;background:var(--primary);width:0;transition:width .3s}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    fileshare · receive
+    <span class="badge">RECEIVE</span>
+  </h1>
+
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <svg class="drop-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <span>Drag &amp; drop files here, or click to select</span>
+    <input type="file" id="fileInput" multiple>
+  </div>
+
+  <ul class="file-list" id="fileList"></ul>
+
+  <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+
+  <button class="btn" id="sendBtn" disabled onclick="uploadFiles()">Send files</button>
+
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+let selectedFiles = [];
+
+function fmt(n){const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return n.toFixed(i?1:0)+' '+u[i]}
+
+function renderList(){
+  const ul=document.getElementById('fileList');
+  ul.innerHTML='';
+  selectedFiles.forEach(f=>{
+    const li=document.createElement('li');
+    li.innerHTML=`<span class="name">${f.name}</span><span class="sz">${fmt(f.size)}</span>`;
+    ul.appendChild(li);
+  });
+  document.getElementById('sendBtn').disabled=selectedFiles.length===0;
+}
+
+document.getElementById('fileInput').addEventListener('change',e=>{
+  selectedFiles=[...e.target.files];
+  renderList();
+});
+
+const dz=document.getElementById('dropZone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{
+  e.preventDefault();dz.classList.remove('over');
+  selectedFiles=[...e.dataTransfer.files];
+  renderList();
+});
+
+async function uploadFiles(){
+  if(!selectedFiles.length)return;
+  const btn=document.getElementById('sendBtn');
+  const bar=document.getElementById('progressBar');
+  const fill=document.getElementById('progressFill');
+  const res=document.getElementById('result');
+  btn.disabled=true;
+  bar.style.display='block';
+  fill.style.width='10%';
+  res.style.display='none';
+
+  const fd=new FormData();
+  selectedFiles.forEach(f=>fd.append('files',f));
+
+  try{
+    fill.style.width='50%';
+    const r=await fetch('/upload',{method:'POST',body:fd});
+    fill.style.width='100%';
+    if(r.ok){
+      const d=await r.json();
+      res.className='result ok';
+      res.textContent='✓ Saved: '+d.saved.join(', ');
+      selectedFiles=[];
+      renderList();
+    } else {
+      res.className='result err';
+      res.textContent='✗ Error: '+(await r.text());
+    }
+  }catch(e){
+    res.className='result err';
+    res.textContent='✗ '+e.message;
+  }
+  res.style.display='block';
+  btn.disabled=false;
+  setTimeout(()=>{bar.style.display='none';fill.style.width='0'},1500);
+}
+</script>
+</body>
+</html>

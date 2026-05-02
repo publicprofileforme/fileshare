@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fileshare · download</title>
+<style>
+:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54}
+[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;font-size:15px;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:420px;display:flex;flex-direction:column;gap:1.5rem;align-items:center;text-align:center}
+.icon{color:var(--primary)}
+h1{font-size:1.2rem;font-weight:600}
+.file-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.5rem;width:100%}
+.file-name{font-weight:600;word-break:break-all;margin-bottom:.3rem}
+.file-size{font-size:.85rem;color:var(--muted)}
+.btn{border:none;border-radius:8px;padding:.75rem 1.5rem;font-size:.95rem;font-weight:600;cursor:pointer;transition:background .18s;background:var(--primary);color:#fff;text-decoration:none;display:inline-block}
+.btn:hover{background:var(--primary-h)}
+.waiting{color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <svg class="icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+
+  {{if .Ready}}
+  <h1>File ready</h1>
+  <div class="file-block">
+    <div class="file-name">{{.FileName}}</div>
+    <div class="file-size">{{.FileSize}}</div>
+  </div>
+  <a class="btn" href="/download">↓ Download</a>
+  {{else}}
+  <h1>Waiting for file…</h1>
+  <p class="waiting">The sender hasn't selected a file yet.<br>This page refreshes automatically.</p>
+  <script>setTimeout(()=>location.reload(),3000)</script>
+  {{end}}
+</div>
+</body>
+</html>
