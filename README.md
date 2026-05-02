@@ -25,7 +25,7 @@
 ## Сборка
 
 ```bash
-git clone <repo>
+git clone https://github.com/publicprofileforme/fileshare.git
 cd fileshare
 go build -o fileshare .
 ```
@@ -146,7 +146,7 @@ fileshare/
 ## Build
 
 ```bash
-git clone <repo>
+git clone https://github.com/publicprofileforme/fileshare.git
 cd fileshare
 go build -o fileshare .
 ```
