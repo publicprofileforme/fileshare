@@ -5,40 +5,57 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>fileshare · send</title>
 <style>
-:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54;--code-bg:#edeae5;--success:#437a22}
-[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b;--code-bg:#22211f;--success:#6daa45}
+:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54;--code-bg:#edeae5;--success:#437a22;--tab-active-bg:#fff}
+[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b;--code-bg:#22211f;--success:#6daa45;--tab-active-bg:#28271f}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;font-size:15px;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1rem}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:500px;display:flex;flex-direction:column;gap:1.25rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:520px;display:flex;flex-direction:column;gap:1.25rem}
 h1{font-size:1.2rem;font-weight:600;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .badge{font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:99px;background:var(--primary);color:#fff;letter-spacing:.05em}
 .mode-badge{font-size:.7rem;padding:.15rem .5rem;border-radius:99px;border:1px solid var(--border);color:var(--muted)}
 
-/* Drop zone / file picker */
-.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:2rem 1.5rem;text-align:center;cursor:pointer;transition:background .18s,border-color .18s;display:flex;flex-direction:column;align-items:center;gap:.7rem;color:var(--muted)}
+/* Tabs */
+.tabs{display:flex;gap:2px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
+.tab{flex:1;padding:.45rem .8rem;border-radius:6px;border:none;background:none;color:var(--muted);font-size:.88rem;font-weight:500;cursor:pointer;transition:background .15s,color .15s;display:flex;align-items:center;justify-content:center;gap:.4rem}
+.tab.active{background:var(--tab-active-bg);color:var(--text);box-shadow:0 1px 3px oklch(0 0 0/.12)}
+.tab:hover:not(.active){color:var(--text)}
+
+/* Panels */
+.panel{display:none;flex-direction:column;gap:1rem}
+.panel.active{display:flex}
+
+/* Drop zone */
+.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:2rem 1.5rem;text-align:center;cursor:pointer;transition:background .18s,border-color .18s;display:flex;flex-direction:column;align-items:center;gap:.6rem;color:var(--muted)}
 .drop-zone.over{background:color-mix(in oklch,var(--primary) 8%,var(--surface));border-color:var(--primary);color:var(--primary)}
 .drop-zone input{display:none}
-.drop-icon{color:var(--primary)}
-.drop-hint{font-size:.85rem}
 
-/* Upload progress */
-.progress-wrap{display:none;flex-direction:column;gap:.5rem}
+/* Textarea */
+textarea{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;color:var(--text);font-size:.95rem;width:100%;resize:vertical;min-height:120px;font-family:inherit;transition:border-color .18s;line-height:1.5}
+textarea:focus{outline:none;border-color:var(--primary)}
+
+/* Buttons */
+.btn{border:none;border-radius:8px;padding:.65rem 1.2rem;font-size:.9rem;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;width:100%;transition:background .18s}
+.btn:hover{background:var(--primary-h)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* Progress */
+.progress-wrap{display:none;flex-direction:column;gap:.4rem}
 .progress-wrap.visible{display:flex}
-.progress-label{font-size:.85rem;color:var(--muted)}
+.progress-label{font-size:.82rem;color:var(--muted)}
 .progress-bar{height:4px;background:var(--border);border-radius:99px;overflow:hidden}
 .progress-fill{height:100%;background:var(--primary);width:0;transition:width .25s}
 
-/* File info */
-.file-info{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;display:none;flex-direction:column;gap:.25rem}
-.file-info.visible{display:flex}
-.file-name{font-weight:600;word-break:break-all}
-.file-size{font-size:.85rem;color:var(--muted)}
+/* File / text result */
+.result-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;display:none;flex-direction:column;gap:.25rem}
+.result-box.visible{display:flex}
+.result-name{font-weight:600;word-break:break-all}
+.result-sub{font-size:.85rem;color:var(--muted)}
 
-/* URL boxes */
+/* URL section */
 .url-section{display:none;flex-direction:column;gap:.5rem}
 .url-section.visible{display:flex}
-label.section-label{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
-.url-box{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:.65rem 1rem;font-family:monospace;font-size:.82rem;word-break:break-all;color:var(--primary);cursor:pointer;transition:opacity .15s;user-select:all}
+.section-label{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.url-box{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:.6rem 1rem;font-family:monospace;font-size:.82rem;word-break:break-all;color:var(--primary);cursor:pointer;transition:opacity .15s}
 .url-box:hover{opacity:.75}
 .copy-hint{font-size:.75rem;color:var(--muted)}
 
@@ -57,116 +74,144 @@ hr{border:none;border-top:1px solid var(--border)}
   </h1>
 
   {{if (eq .Headless false)}}
-  <!-- File picker drop zone -->
-  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-    <svg class="drop-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    <span>Click to choose a file</span>
-    <span class="drop-hint">or drag &amp; drop it here</span>
-    <input type="file" id="fileInput">
+  <!-- Tab switcher -->
+  <div class="tabs">
+    <button class="tab active" id="tabFile" onclick="switchTab('file')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      File
+    </button>
+    <button class="tab" id="tabText" onclick="switchTab('text')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Text
+    </button>
   </div>
 
-  <!-- Upload progress -->
-  <div class="progress-wrap" id="progressWrap">
-    <div class="progress-label" id="progressLabel">Uploading…</div>
-    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <!-- File panel -->
+  <div class="panel active" id="panelFile">
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--primary)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>Click to choose a file</span>
+      <span style="font-size:.82rem">or drag &amp; drop</span>
+      <input type="file" id="fileInput">
+    </div>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-label" id="progressLabel">Uploading…</div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+  </div>
+
+  <!-- Text panel -->
+  <div class="panel" id="panelText">
+    <textarea id="textInput" placeholder="Type or paste text here…" rows="5"></textarea>
+    <button class="btn" id="textBtn" onclick="sendText()">Set text</button>
   </div>
   {{end}}
 
-  <!-- Selected file info -->
-  <div class="file-info{{if .Ready}} visible{{end}}" id="fileInfo">
-    <div class="file-name" id="fileName">{{.FileName}}</div>
-    <div class="file-size" id="fileSize">{{.FileSize}}</div>
+  <!-- Current payload info -->
+  <div class="result-box{{if (eq .Mode .ModeFile)}} visible{{end}}{{if (eq .Mode .ModeText)}} visible{{end}}" id="resultBox">
+    <div class="result-name" id="resultName">
+      {{if (eq .Mode .ModeFile)}}{{.FileName}}{{end}}
+      {{if (eq .Mode .ModeText)}}Text message{{end}}
+    </div>
+    <div class="result-sub" id="resultSub">
+      {{if (eq .Mode .ModeFile)}}{{.FileSize}}{{end}}
+      {{if (eq .Mode .ModeText)}}{{len .Text}} chars — ready to copy{{end}}
+    </div>
   </div>
 
   <!-- Client links -->
-  {{if .Ready}}<hr>{{end}}
-  <div class="url-section{{if .Ready}} visible{{end}}" id="urlSection">
-    <label class="section-label">Client link — share this</label>
+  <div class="url-section{{if (eq .Mode .ModeFile)}} visible{{end}}{{if (eq .Mode .ModeText)}} visible{{end}}" id="urlSection">
+    <hr>
+    <span class="section-label">Client link — share this</span>
     {{range .IPs}}
-    <div class="url-box" onclick="copyURL(this)" title="click to copy">http://{{.}}:{{$.ClientPort}}/download</div>
+    <div class="url-box" onclick="copyURL(this)">http://{{.}}:{{$.ClientPort}}</div>
     {{end}}
-    <div class="url-box" onclick="copyURL(this)" title="click to copy">http://localhost:{{.ClientPort}}/download</div>
-    <span class="copy-hint">Click any URL to copy</span>
+    <div class="url-box" onclick="copyURL(this)">http://localhost:{{.ClientPort}}</div>
+    <span class="copy-hint">Click to copy</span>
   </div>
 
-  <p class="status{{if .Ready}} ok{{end}}" id="status">
-    {{if .Ready}}✓ File ready for download{{else}}No file selected{{end}}
+  <p class="status{{if (eq .Mode .ModeFile)}} ok{{end}}{{if (eq .Mode .ModeText)}} ok{{end}}" id="statusEl">
+    {{if (eq .Mode .ModeFile)}}✓ File ready for download{{else if (eq .Mode .ModeText)}}✓ Text ready{{else}}Nothing shared yet{{end}}
   </p>
 </div>
 
 <script>
-const dropZone   = document.getElementById('dropZone');
-const fileInput  = document.getElementById('fileInput');
-const progressWrap = document.getElementById('progressWrap');
-const progressFill = document.getElementById('progressFill');
-const progressLabel = document.getElementById('progressLabel');
-const fileInfo   = document.getElementById('fileInfo');
-const urlSection = document.getElementById('urlSection');
-const statusEl   = document.getElementById('statusEl') || document.querySelector('.status');
-
-if (fileInput) {
-  fileInput.addEventListener('change', e => {
-    if (e.target.files.length) uploadFile(e.target.files[0]);
-  });
+// Tab switching
+function switchTab(tab) {
+  document.getElementById('panelFile').classList.toggle('active', tab === 'file');
+  document.getElementById('panelText').classList.toggle('active', tab === 'text');
+  document.getElementById('tabFile').classList.toggle('active', tab === 'file');
+  document.getElementById('tabText').classList.toggle('active', tab === 'text');
 }
 
+// File upload via XHR
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+if (fileInput) {
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) uploadFile(e.target.files[0]); });
+}
 if (dropZone) {
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
   dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
   dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('over');
-    const f = e.dataTransfer.files[0];
-    if (f) uploadFile(f);
+    e.preventDefault(); dropZone.classList.remove('over');
+    if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
   });
 }
 
-async function uploadFile(file) {
-  dropZone.style.pointerEvents = 'none';
-  dropZone.style.opacity = '.5';
-  progressWrap.classList.add('visible');
-  progressFill.style.width = '5%';
-  progressLabel.textContent = `Uploading ${file.name}…`;
-
-  const fd = new FormData();
-  fd.append('file', file);
-
-  // Use XHR for progress events
+function uploadFile(file) {
+  const pw = document.getElementById('progressWrap');
+  const pf = document.getElementById('progressFill');
+  const pl = document.getElementById('progressLabel');
+  dropZone.style.opacity = '.5'; dropZone.style.pointerEvents = 'none';
+  pw.classList.add('visible'); pf.style.width = '5%';
+  pl.textContent = 'Uploading ' + file.name + '…';
+  const fd = new FormData(); fd.append('file', file);
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/api/upload-file');
-
-  xhr.upload.onprogress = e => {
-    if (e.lengthComputable) {
-      progressFill.style.width = Math.round(e.loaded / e.total * 90) + '%';
-    }
-  };
-
+  xhr.upload.onprogress = e => { if (e.lengthComputable) pf.style.width = (e.loaded/e.total*90)+'%'; };
   xhr.onload = () => {
-    progressFill.style.width = '100%';
+    pf.style.width = '100%';
     if (xhr.status === 200) {
       const d = JSON.parse(xhr.responseText);
-      document.getElementById('fileName').textContent = d.name;
-      document.getElementById('fileSize').textContent = d.size;
-      fileInfo.classList.add('visible');
-      urlSection.classList.add('visible');
-      progressLabel.textContent = '✓ ' + d.name + ' ready';
-      document.querySelector('.status').textContent = '✓ File ready for download';
-      document.querySelector('.status').classList.add('ok');
+      setResult(d.name, d.size);
+      pl.textContent = '✓ ' + d.name;
     } else {
-      progressLabel.textContent = '✗ Error: ' + xhr.responseText;
-      progressFill.style.background = '#d163a7';
+      pl.textContent = '✗ ' + xhr.responseText;
+      pf.style.background = '#d163a7';
     }
-    dropZone.style.pointerEvents = '';
-    dropZone.style.opacity = '';
+    dropZone.style.opacity = ''; dropZone.style.pointerEvents = '';
   };
-
-  xhr.onerror = () => {
-    progressLabel.textContent = '✗ Network error';
-    dropZone.style.pointerEvents = '';
-    dropZone.style.opacity = '';
-  };
-
+  xhr.onerror = () => { pl.textContent = '✗ Network error'; dropZone.style.opacity=''; dropZone.style.pointerEvents=''; };
   xhr.send(fd);
+}
+
+// Text send
+async function sendText() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) return;
+  const btn = document.getElementById('textBtn');
+  btn.disabled = true; btn.textContent = 'Setting…';
+  const r = await fetch('/api/set-text', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text})
+  });
+  btn.disabled = false; btn.textContent = 'Set text';
+  if (r.ok) {
+    setResult('Text message', text.length + ' chars — ready to copy');
+  } else {
+    alert(await r.text());
+  }
+}
+
+function setResult(name, sub) {
+  document.getElementById('resultName').textContent = name;
+  document.getElementById('resultSub').textContent = sub;
+  document.getElementById('resultBox').classList.add('visible');
+  document.getElementById('urlSection').classList.add('visible');
+  document.getElementById('statusEl').textContent = '✓ Ready';
+  document.getElementById('statusEl').classList.add('ok');
 }
 
 function copyURL(el) {

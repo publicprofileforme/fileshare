@@ -5,37 +5,103 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>fileshare · download</title>
 <style>
-:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54}
-[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b}
+:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54;--success:#437a22}
+[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b;--success:#6daa45}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,sans-serif;font-size:15px;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:420px;display:flex;flex-direction:column;gap:1.5rem;align-items:center;text-align:center}
+body{font-family:system-ui,sans-serif;font-size:15px;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:460px;display:flex;flex-direction:column;gap:1.5rem;align-items:center;text-align:center}
 .icon{color:var(--primary)}
 h1{font-size:1.2rem;font-weight:600}
-.file-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.5rem;width:100%}
-.file-name{font-weight:600;word-break:break-all;margin-bottom:.3rem}
+.file-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;width:100%;text-align:left}
+.file-name{font-weight:600;word-break:break-all;margin-bottom:.25rem}
 .file-size{font-size:.85rem;color:var(--muted)}
-.btn{border:none;border-radius:8px;padding:.75rem 1.5rem;font-size:.95rem;font-weight:600;cursor:pointer;transition:background .18s;background:var(--primary);color:#fff;text-decoration:none;display:inline-block}
+.text-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;width:100%;text-align:left;display:flex;flex-direction:column;gap:.6rem}
+.text-content{font-size:.95rem;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow-y:auto;color:var(--text)}
+.text-meta{font-size:.8rem;color:var(--muted)}
+.btn{border:none;border-radius:8px;padding:.75rem 1.5rem;font-size:.95rem;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:.5rem;transition:background .18s;width:100%;justify-content:center}
 .btn:hover{background:var(--primary-h)}
-.waiting{color:var(--muted);font-size:.9rem}
+.btn.success{background:var(--success)}
+.waiting{color:var(--muted);font-size:.9rem;line-height:1.6}
 </style>
 </head>
 <body>
 <div class="card">
-  <svg class="icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 
-  {{if .Ready}}
+  {{if (eq .Mode 0)}}
+  <svg class="icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+  <h1>Waiting…</h1>
+  <p class="waiting">Nothing shared yet.<br>This page refreshes automatically.</p>
+  <script>
+    (function poll(){
+      fetch('/api/status').then(r=>r.json()).then(d=>{
+        if(d.mode!==0) location.reload();
+        else setTimeout(poll,2500);
+      }).catch(()=>setTimeout(poll,3000));
+    })();
+  </script>
+
+  {{else if (eq .Mode .ModeFile)}}
+  <svg class="icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
   <h1>File ready</h1>
   <div class="file-block">
     <div class="file-name">{{.FileName}}</div>
     <div class="file-size">{{.FileSize}}</div>
   </div>
-  <a class="btn" href="/download">↓ Download</a>
-  {{else}}
-  <h1>Waiting for file…</h1>
-  <p class="waiting">The sender hasn't selected a file yet.<br>This page refreshes automatically.</p>
-  <script>setTimeout(()=>location.reload(),3000)</script>
+  <a class="btn" href="/download">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Download
+  </a>
+
+  {{else if (eq .Mode .ModeText)}}
+  <svg class="icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  <h1>Text message</h1>
+  <div class="text-block">
+    <div class="text-content" id="textContent">{{.Text}}</div>
+    <div class="text-meta">{{len .Text}} characters</div>
+  </div>
+  <button class="btn" id="copyBtn">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    Copy text
+  </button>
   {{end}}
+
 </div>
+<script>
+function clipboardWrite(text, btn) {
+  const origHTML = btn ? btn.innerHTML : null;
+  function onSuccess() {
+    if (!btn) return;
+    btn.classList.add('success');
+    btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+    setTimeout(function(){ btn.classList.remove('success'); btn.innerHTML = origHTML; }, 2000);
+  }
+  function execFallback() {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;width:2em;height:2em;padding:0;border:none;outline:none;background:transparent;opacity:0.01;z-index:9999';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+    if (ok) onSuccess();
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(onSuccess).catch(execFallback);
+  } else {
+    execFallback();
+  }
+}
+
+var copyBtn = document.getElementById('copyBtn');
+if (copyBtn) {
+  copyBtn.addEventListener('click', function() {
+    var text = document.getElementById('textContent').textContent;
+    clipboardWrite(text, copyBtn);
+  });
+}
+</script>
 </body>
 </html>

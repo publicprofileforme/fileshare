@@ -23,6 +23,8 @@ import (
 //go:embed templates/*
 var templateFS embed.FS
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 func localIPs() []string {
 	var ips []string
 	ifaces, _ := net.Interfaces()
@@ -74,15 +76,26 @@ func defaultSaveDir() string {
 
 // ─── Send state ───────────────────────────────────────────────────────────────
 
+type sendMode int
+
+const (
+	modeIdle sendMode = iota
+	modeFile
+	modeText
+)
+
 type sendState struct {
 	mu       sync.RWMutex
+	mode     sendMode
+	// file
 	filePath string
 	fileName string
 	fileSize int64
-	ready    bool
+	// text
+	text string
 }
 
-func (s *sendState) set(path string) error {
+func (s *sendState) setFile(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		return err
@@ -92,17 +105,57 @@ func (s *sendState) set(path string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.mode     = modeFile
 	s.filePath = path
 	s.fileName = filepath.Base(path)
 	s.fileSize = info.Size()
-	s.ready = true
+	s.text     = ""
 	return nil
 }
 
-func (s *sendState) get() (path, name string, size int64, ready bool) {
+func (s *sendState) setText(text string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mode     = modeText
+	s.text     = text
+	s.filePath = ""
+	s.fileName = ""
+	s.fileSize = 0
+}
+
+func (s *sendState) snapshot() (mode sendMode, filePath, fileName, text string, fileSize int64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.filePath, s.fileName, s.fileSize, s.ready
+	return s.mode, s.filePath, s.fileName, s.text, s.fileSize
+}
+
+// ─── Received text log ────────────────────────────────────────────────────────
+
+type textLog struct {
+	mu      sync.RWMutex
+	entries []textEntry
+}
+
+type textEntry struct {
+	Time string `json:"time"`
+	Text string `json:"text"`
+}
+
+func (l *textLog) add(text string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, textEntry{
+		Time: time.Now().Format("15:04:05"),
+		Text: text,
+	})
+}
+
+func (l *textLog) all() []textEntry {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	cp := make([]textEntry, len(l.entries))
+	copy(cp, l.entries)
+	return cp
 }
 
 // ─── Send server ──────────────────────────────────────────────────────────────
@@ -123,20 +176,23 @@ func (srv *sendServer) registerAdminRoutes(mux *http.ServeMux) {
 			http.NotFound(w, r)
 			return
 		}
-		_, name, size, ready := srv.state.get()
+		mode, _, fileName, text, fileSize := srv.state.snapshot()
 		data := map[string]interface{}{
 			"ClientPort": srv.clientPort,
 			"IPs":        localIPs(),
 			"Headless":   srv.headless,
-			"Ready":      ready,
-			"FileName":   name,
-			"FileSize":   humanSize(size),
+			"Mode":       mode,
+			"ModeFile":   modeFile,
+			"ModeText":   modeText,
+			"FileName":   fileName,
+			"FileSize":   humanSize(fileSize),
+			"Text":       text,
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		srv.tmpl.ExecuteTemplate(w, "send_admin.html", data)
 	})
 
-	// Upload file via browser file picker → store in tmpDir, register in state
+	// Upload file via browser
 	mux.HandleFunc("/api/upload-file", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)
@@ -158,7 +214,6 @@ func (srv *sendServer) registerAdminRoutes(mux *http.ServeMux) {
 			return
 		}
 		defer src.Close()
-
 		safeName := filepath.Base(fh.Filename)
 		dst := filepath.Join(srv.tmpDir, safeName)
 		out, err := os.Create(dst)
@@ -168,21 +223,20 @@ func (srv *sendServer) registerAdminRoutes(mux *http.ServeMux) {
 		}
 		io.Copy(out, src)
 		out.Close()
-
-		if err := srv.state.set(dst); err != nil {
+		if err := srv.state.setFile(dst); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		_, name, size, _ := srv.state.get()
-		fmt.Printf("[send]  file set: %s (%s)\n", name, humanSize(size))
+		_, _, fileName, _, fileSize := srv.state.snapshot()
+		fmt.Printf("[send]  file: %s (%s)\n", fileName, humanSize(fileSize))
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"name": name,
-			"size": humanSize(size),
+			"name": fileName,
+			"size": humanSize(fileSize),
 		})
 	})
 
-	// Set file by path (headless / manual)
+	// Set file by path (headless)
 	mux.HandleFunc("/api/select", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)
@@ -195,27 +249,51 @@ func (srv *sendServer) registerAdminRoutes(mux *http.ServeMux) {
 			http.Error(w, "bad request", 400)
 			return
 		}
-		if err := srv.state.set(body.Path); err != nil {
+		if err := srv.state.setFile(body.Path); err != nil {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		_, name, size, _ := srv.state.get()
-		fmt.Printf("[send]  file set: %s (%s)\n", name, humanSize(size))
+		_, _, fileName, _, fileSize := srv.state.snapshot()
+		fmt.Printf("[send]  file: %s (%s)\n", fileName, humanSize(fileSize))
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"name": name,
-			"size": humanSize(size),
+			"name": fileName,
+			"size": humanSize(fileSize),
 		})
+	})
+
+	// Set text
+	mux.HandleFunc("/api/set-text", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		var body struct {
+			Text string `json:"text"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", 400)
+			return
+		}
+		if strings.TrimSpace(body.Text) == "" {
+			http.Error(w, "empty text", 400)
+			return
+		}
+		srv.state.setText(body.Text)
+		fmt.Printf("[send]  text set (%d chars)\n", len(body.Text))
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
 
 	// Status
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		_, name, size, ready := srv.state.get()
+		mode, _, fileName, text, fileSize := srv.state.snapshot()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"ready": ready,
-			"name":  name,
-			"size":  humanSize(size),
+			"mode":     mode,
+			"fileName": fileName,
+			"fileSize": humanSize(fileSize),
+			"text":     text,
 		})
 	})
 }
@@ -226,32 +304,47 @@ func (srv *sendServer) registerClientRoutes(mux *http.ServeMux) {
 			http.NotFound(w, r)
 			return
 		}
-		_, name, size, ready := srv.state.get()
+		mode, _, fileName, text, fileSize := srv.state.snapshot()
 		data := map[string]interface{}{
-			"Ready":    ready,
-			"FileName": name,
-			"FileSize": humanSize(size),
+			"Mode":     mode,
+			"ModeFile": modeFile,
+			"ModeText": modeText,
+			"FileName": fileName,
+			"FileSize": humanSize(fileSize),
+			"Text":     text,
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		srv.tmpl.ExecuteTemplate(w, "send_client.html", data)
 	})
 
 	mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
-		path, name, size, ready := srv.state.get()
-		if !ready {
+		mode, filePath, fileName, _, fileSize := srv.state.snapshot()
+		if mode != modeFile {
 			http.Error(w, "no file available", 503)
 			return
 		}
-		f, err := os.Open(path)
+		f, err := os.Open(filePath)
 		if err != nil {
 			http.Error(w, "file not found", 404)
 			return
 		}
 		defer f.Close()
-		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="`+fileName+`"`)
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+		w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
 		io.Copy(w, f)
+	})
+
+	// Poll for client (auto-refresh when idle)
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		mode, _, fileName, text, fileSize := srv.state.snapshot()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"mode":     mode,
+			"fileName": fileName,
+			"fileSize": humanSize(fileSize),
+			"text":     text,
+		})
 	})
 }
 
@@ -261,6 +354,7 @@ type receiveServer struct {
 	saveDir string
 	port    int
 	tmpl    *template.Template
+	log     *textLog
 }
 
 func (srv *receiveServer) registerRoutes(mux *http.ServeMux) {
@@ -278,6 +372,7 @@ func (srv *receiveServer) registerRoutes(mux *http.ServeMux) {
 		srv.tmpl.ExecuteTemplate(w, "receive.html", data)
 	})
 
+	// File upload
 	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)
@@ -313,12 +408,49 @@ func (srv *receiveServer) registerRoutes(mux *http.ServeMux) {
 			io.Copy(out, src)
 			out.Close()
 			src.Close()
-			fmt.Printf("[recv]  saved: %s\n", dst)
+			fmt.Printf("[recv]  file saved: %s\n", dst)
 			saved = append(saved, filepath.Base(dst))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"saved": saved})
 	})
+
+	// Text receive
+	mux.HandleFunc("/send-text", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		var body struct {
+			Text string `json:"text"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad request", 400)
+			return
+		}
+		text := strings.TrimSpace(body.Text)
+		if text == "" {
+			http.Error(w, "empty text", 400)
+			return
+		}
+		srv.log.add(text)
+		fmt.Printf("[recv]  text (%d chars): %s\n", len(text), truncate(text, 80))
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	})
+
+	// Text log poll
+	mux.HandleFunc("/api/texts", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(srv.log.all())
+	})
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -347,21 +479,18 @@ func main() {
 
 	// ── Send ─────────────────────────────────────────
 	if !*noSend {
-		// Temp dir for files uploaded via browser picker
 		tmpDir, err := os.MkdirTemp("", "fileshare-send-*")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "cannot create tmp dir: %v\n", err)
 			os.Exit(1)
 		}
-
 		state := &sendState{}
 		if headless {
-			if err := state.set(*filePath); err != nil {
+			if err := state.setFile(*filePath); err != nil {
 				fmt.Fprintf(os.Stderr, "cannot load file: %v\n", err)
 				os.Exit(1)
 			}
 		}
-
 		ss := &sendServer{
 			state:      state,
 			adminPort:  *adminPort,
@@ -370,7 +499,6 @@ func main() {
 			headless:   headless,
 			tmpDir:     tmpDir,
 		}
-
 		adminMux := http.NewServeMux()
 		ss.registerAdminRoutes(adminMux)
 		adminSrv := &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", *adminPort), Handler: adminMux}
@@ -391,7 +519,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "cannot create dir: %v\n", err)
 			os.Exit(1)
 		}
-		rs := &receiveServer{saveDir: *receiveDir, port: *receivePort, tmpl: tmpl}
+		rs := &receiveServer{
+			saveDir: *receiveDir,
+			port:    *receivePort,
+			tmpl:    tmpl,
+			log:     &textLog{},
+		}
 		recvMux := http.NewServeMux()
 		rs.registerRoutes(recvMux)
 		recvSrv := &http.Server{Addr: fmt.Sprintf("0.0.0.0:%d", *receivePort), Handler: recvMux}

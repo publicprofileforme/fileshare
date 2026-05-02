@@ -1,61 +1,62 @@
 # fileshare
 
-Лёгкая утилита для передачи файлов по локальной сети или VPN — без облаков, без регистрации.  
-Запускаешь у себя, второй человек открывает браузер.
-
-> **Lightweight peer-to-peer file transfer over LAN or VPN — no cloud, no signup.**  
-> Run it locally, the other person opens a browser.
+Утилита для быстрой передачи файлов и текста по локальной сети или VPN между двумя компьютерами. Написана на Go, без зависимостей — только стандартная библиотека.
 
 ---
 
-## Оглавление / Table of Contents
+## Возможности
 
-- [Русский](#русский)
-- [English](#english)
+- **Send** — отдача файла или текста другому человеку
+- **Receive** — приём файлов и текстовых сообщений через браузер
+- Оба сервера запускаются одновременно по умолчанию
+- Drag & drop загрузка файлов
+- Копирование текста в один клик (работает по `http://` на Windows)
+- Автоматический поллинг на стороне клиента — страница обновляется как только файл или текст становится доступен
+- Лог входящих текстовых сообщений с временны́ми метками
+- Graceful shutdown по `Ctrl+C` / `SIGTERM`
+- Дедупликация имён файлов при сохранении
+- Все шаблоны вшиты в бинарь через `//go:embed` — один файл, никаких зависимостей
 
 ---
-
-# Русский
 
 ## Требования
 
 - Go 1.21+
-- Только стандартная библиотека — никаких зависимостей
+- Только стандартная библиотека
+
+---
 
 ## Сборка
 
 ```bash
-git clone https://github.com/publicprofileforme/fileshare.git
+git clone https://github.com/you/fileshare
 cd fileshare
 go build -o fileshare .
 ```
 
 ### Кросс-компиляция
 
-```bash
-# Windows (64-bit)
-GOOS=windows GOARCH=amd64 go build -o fileshare.exe .
+| Платформа | Команда |
+|---|---|
+| Windows x64 | `GOOS=windows GOARCH=amd64 go build -o fileshare.exe .` |
+| macOS Apple Silicon | `GOOS=darwin GOARCH=arm64 go build -o fileshare-mac-arm .` |
+| macOS Intel | `GOOS=darwin GOARCH=amd64 go build -o fileshare-mac-x64 .` |
+| Linux x64 | `GOOS=linux GOARCH=amd64 go build -o fileshare-linux-x64 .` |
+| Linux ARM (Raspberry Pi) | `GOOS=linux GOARCH=arm GOARM=7 go build -o fileshare-linux-arm .` |
+| Linux ARM64 (Orange Pi) | `GOOS=linux GOARCH=arm64 go build -o fileshare-linux-arm64 .` |
 
-# macOS Apple Silicon
-GOOS=darwin GOARCH=arm64 go build -o fileshare-mac-arm .
-
-# Linux ARM (Raspberry Pi / Orange Pi)
-GOOS=linux GOARCH=arm GOARM=7 go build -o fileshare-linux-arm .
-
-# Linux x86-64
-GOOS=linux GOARCH=amd64 go build -o fileshare-linux-amd64 .
-```
+---
 
 ## Запуск
 
 ```bash
-# Оба режима (отдача + приём) — по умолчанию
+# Оба режима (по умолчанию)
 ./fileshare
 
 # Только приём файлов
 ./fileshare --no-send
 
-# Только отдача, headless (файл сразу готов)
+# Только отдача, файл указан сразу (headless)
 ./fileshare --no-receive --file /home/user/archive.tar.gz
 
 # Свои порты
@@ -65,202 +66,208 @@ GOOS=linux GOARCH=amd64 go build -o fileshare-linux-amd64 .
 ./fileshare --dir /mnt/nas/inbox
 ```
 
-## Флаги
+### Флаги
 
 | Флаг | По умолчанию | Описание |
-|------|-------------|---------|
-| `--send-port` | `8080` | Порт для клиента (скачивание файла) |
-| `--admin-port` | `8081` | Порт Admin UI (только localhost) |
-| `--receive-port` | `8082` | Порт для загрузки файлов от собеседника |
-| `--dir` | `~/Downloads/Uploads` | Папка для сохранения принятых файлов |
-| `--file` | — | Путь к файлу → headless-режим отдачи |
+|---|---|---|
+| `--send-port` | `8080` | Порт клиента для скачивания (все интерфейсы) |
+| `--admin-port` | `8081` | Порт админки send (только localhost) |
+| `--receive-port` | `8082` | Порт приёма файлов (все интерфейсы) |
+| `--dir` | `~/Downloads/Uploads` | Папка для принятых файлов |
+| `--file` | — | Путь к файлу для раздачи (headless-режим) |
 | `--no-send` | `false` | Отключить сервер отдачи |
 | `--no-receive` | `false` | Отключить сервер приёма |
 
-## Как это работает
+---
 
-### Отдача файла (send)
+## Режим Send
 
-Поднимаются два сервера:
+Поднимает два HTTP-сервера:
 
-- **Admin** (`localhost:8081`) — только для тебя. Открой в браузере, выбери файл через файловый менеджер браузера или перетащи. Файл загрузится на сервер и станет доступен клиенту.
-- **Client** (`0.0.0.0:8080`) — для собеседника. Открывает страницу с кнопкой **Download**.
+| Сервер | Адрес | Для кого |
+|---|---|---|
+| Admin | `localhost:<admin-port>` | Ты — выбираешь файл или вводишь текст |
+| Client | `0.0.0.0:<send-port>` | Второй человек — скачивает или копирует |
 
-```
-Ты                           Собеседник
-────────────────────         ─────────────────────────
-localhost:8081               http://<твой_ip>:8080
-  ↓ выбрал файл                ↓ нажал Download
-  файл сохранён во             ← получил файл
-  tmp и зарегистрирован
-```
+**GUI-режим** (по умолчанию): открой `http://localhost:8081` → укажи путь к файлу или введи текст → клиент увидит его автоматически.
 
-**GUI-режим** (по умолчанию): открой `http://localhost:8081`, выбери файл — он станет доступен.  
-**Headless-режим** (`--file`): файл готов к раздаче сразу после запуска, без открытия браузера.
+**Headless-режим** (`--file`): файл сразу доступен после запуска, без открытия браузера.
 
-### Приём файлов (receive)
+Клиентская страница автоматически опрашивает сервер и обновляется как только появляется файл или текст.
 
-Один сервер на `0.0.0.0:8082`. Собеседник открывает `http://<твой_ip>:8082`, выбирает файлы или перетаскивает, нажимает **Send files**. Файлы сохраняются в `--dir`.
+---
 
-При совпадении имён к файлу автоматически добавляется временна́я метка: `file_2026-05-02_13-00-00.zip`.
+## Режим Receive
 
-## Вывод при запуске
+Поднимает один HTTP-сервер на `0.0.0.0:<receive-port>`.
 
-```
-  fileshare started!
-  ──────────────────────────────────────────────
-  [SEND]  Mode         : GUI
-          Admin (you)  : http://localhost:8081
-          Client       : http://10.0.0.2:8080
-  ──────────────────────────────────────────────
-  [RECV]  Upload URL   : http://10.0.0.2:8082
-          Localhost    : http://localhost:8082
-          Save dir     : /home/user/Downloads/Uploads
-  ──────────────────────────────────────────────
-  Stop: Ctrl+C
-```
+Второй человек открывает `http://<твой_ip>:8082` и видит две вкладки:
+
+- **Files** — drag & drop или выбор файлов, кнопка «Send files»
+- **Text** — ввод текста, кнопка «Send text», лог входящих сообщений с кнопкой «Copy» у каждого
+
+Принятые файлы сохраняются в `--dir`. Если файл с таким именем уже существует, к имени добавляется временна́я метка `_YYYY-MM-DD_HH-MM-SS`.
+
+---
 
 ## Структура проекта
 
 ```
 fileshare/
-├── main.go               # Весь серверный код
+├── main.go
 ├── go.mod
 └── templates/
-    ├── send_admin.html   # Admin UI (выбор файла)
-    ├── send_client.html  # Страница скачивания
-    └── receive.html      # Страница загрузки файлов
+    ├── send_admin.html    # Админка (localhost)
+    ├── send_client.html   # Клиент скачивания
+    └── receive.html       # Страница загрузки файлов и текста
 ```
-
-Все шаблоны вшиты в бинарь через `//go:embed` — итоговый исполняемый файл полностью самодостаточен.
 
 ---
 
-# English
+## Заметки по безопасности
+
+- Admin-сервер слушает **только на `127.0.0.1`** — недоступен снаружи
+- Аутентификации нет — используй только в доверенных сетях (LAN, VPN)
+- Имена файлов при сохранении обрабатываются через `filepath.Base` для защиты от path traversal
+
+---
+
+---
+
+# fileshare
+
+A utility for fast file and text transfer over a local network or VPN between two computers. Written in Go, zero dependencies — standard library only.
+
+---
+
+## Features
+
+- **Send** — share a file or text with another person
+- **Receive** — accept files and text messages via browser
+- Both servers run simultaneously by default
+- Drag & drop file upload
+- One-click text copy (works over `http://` on Windows)
+- Automatic client-side polling — page updates as soon as a file or text becomes available
+- Incoming text message log with timestamps
+- Graceful shutdown on `Ctrl+C` / `SIGTERM`
+- Filename deduplication on save
+- All templates embedded in the binary via `//go:embed` — single file, no runtime dependencies
+
+---
 
 ## Requirements
 
 - Go 1.21+
-- Standard library only — zero external dependencies
+- Standard library only
+
+---
 
 ## Build
 
 ```bash
-git clone https://github.com/publicprofileforme/fileshare.git
+git clone https://github.com/you/fileshare
 cd fileshare
 go build -o fileshare .
 ```
 
 ### Cross-compilation
 
-```bash
-# Windows (64-bit)
-GOOS=windows GOARCH=amd64 go build -o fileshare.exe .
+| Platform | Command |
+|---|---|
+| Windows x64 | `GOOS=windows GOARCH=amd64 go build -o fileshare.exe .` |
+| macOS Apple Silicon | `GOOS=darwin GOARCH=arm64 go build -o fileshare-mac-arm .` |
+| macOS Intel | `GOOS=darwin GOARCH=amd64 go build -o fileshare-mac-x64 .` |
+| Linux x64 | `GOOS=linux GOARCH=amd64 go build -o fileshare-linux-x64 .` |
+| Linux ARM (Raspberry Pi) | `GOOS=linux GOARCH=arm GOARM=7 go build -o fileshare-linux-arm .` |
+| Linux ARM64 (Orange Pi) | `GOOS=linux GOARCH=arm64 go build -o fileshare-linux-arm64 .` |
 
-# macOS Apple Silicon
-GOOS=darwin GOARCH=arm64 go build -o fileshare-mac-arm .
-
-# Linux ARM (Raspberry Pi / Orange Pi)
-GOOS=linux GOARCH=arm GOARM=7 go build -o fileshare-linux-arm .
-
-# Linux x86-64
-GOOS=linux GOARCH=amd64 go build -o fileshare-linux-amd64 .
-```
+---
 
 ## Usage
 
 ```bash
-# Both modes (send + receive) — default
+# Both modes (default)
 ./fileshare
 
 # Receive only
 ./fileshare --no-send
 
-# Send only, headless (file ready immediately)
+# Send only, file specified immediately (headless)
 ./fileshare --no-receive --file /home/user/archive.tar.gz
 
 # Custom ports
 ./fileshare --send-port 9090 --admin-port 9091 --receive-port 9092
 
-# Custom receive directory
+# Custom save directory
 ./fileshare --dir /mnt/nas/inbox
 ```
 
-## Flags
+### Flags
 
 | Flag | Default | Description |
-|------|---------|-------------|
-| `--send-port` | `8080` | Client-facing download port |
-| `--admin-port` | `8081` | Admin UI port (localhost only) |
-| `--receive-port` | `8082` | Upload port for incoming files |
-| `--dir` | `~/Downloads/Uploads` | Directory to save received files |
-| `--file` | — | File path → headless send mode |
+|---|---|---|
+| `--send-port` | `8080` | Client download port (all interfaces) |
+| `--admin-port` | `8081` | Send admin port (localhost only) |
+| `--receive-port` | `8082` | File receive port (all interfaces) |
+| `--dir` | `~/Downloads/Uploads` | Directory for received files |
+| `--file` | — | File path to share (headless mode) |
 | `--no-send` | `false` | Disable send server |
 | `--no-receive` | `false` | Disable receive server |
 
-## How It Works
+---
 
-### Sending a file
+## Send mode
 
-Two servers are started:
+Runs two HTTP servers:
 
-- **Admin** (`localhost:8081`) — your local UI. Open in a browser, pick a file via the native file dialog or drag & drop. The file is uploaded to the server and made available to the client.
-- **Client** (`0.0.0.0:8080`) — the peer's endpoint. Shows a **Download** button.
+| Server | Address | Who |
+|---|---|---|
+| Admin | `localhost:<admin-port>` | You — select file or enter text |
+| Client | `0.0.0.0:<send-port>` | Other person — downloads or copies |
 
-```
-You                          Peer
-────────────────────         ─────────────────────────
-localhost:8081               http://<your_ip>:8080
-  ↓ picked a file              ↓ clicked Download
-  file stored in tmp           ← received the file
-  and registered
-```
+**GUI mode** (default): open `http://localhost:8081` → enter file path or type text → client sees it automatically.
 
-**GUI mode** (default): open `http://localhost:8081`, pick a file — it becomes available immediately.  
-**Headless mode** (`--file`): the file is ready as soon as the process starts, no browser needed.
+**Headless mode** (`--file`): file is immediately available after launch, no browser needed.
 
-### Receiving files
+The client page polls the server automatically and refreshes as soon as a file or text is available.
 
-A single server on `0.0.0.0:8082`. The peer opens `http://<your_ip>:8082`, selects or drags files, clicks **Send files**. Files are saved to `--dir`.
+---
 
-Name collisions are resolved automatically by appending a timestamp: `file_2026-05-02_13-00-00.zip`.
+## Receive mode
 
-## Startup Output
+Runs a single HTTP server on `0.0.0.0:<receive-port>`.
 
-```
-  fileshare started!
-  ──────────────────────────────────────────────
-  [SEND]  Mode         : GUI
-          Admin (you)  : http://localhost:8081
-          Client       : http://10.0.0.2:8080
-  ──────────────────────────────────────────────
-  [RECV]  Upload URL   : http://10.0.0.2:8082
-          Localhost    : http://localhost:8082
-          Save dir     : /home/user/Downloads/Uploads
-  ──────────────────────────────────────────────
-  Stop: Ctrl+C
-```
+The other person opens `http://<your_ip>:8082` and sees two tabs:
 
-## Project Structure
+- **Files** — drag & drop or file picker, «Send files» button
+- **Text** — text input, «Send text» button, incoming message log with «Copy» button on each entry
+
+Received files are saved to `--dir`. If a file with the same name already exists, a timestamp `_YYYY-MM-DD_HH-MM-SS` is appended.
+
+---
+
+## Project structure
 
 ```
 fileshare/
-├── main.go               # All server logic
+├── main.go
 ├── go.mod
 └── templates/
-    ├── send_admin.html   # Admin UI (file picker)
-    ├── send_client.html  # Download page
-    └── receive.html      # Upload page
+    ├── send_admin.html    # Admin UI (localhost)
+    ├── send_client.html   # Download client page
+    └── receive.html       # File and text upload page
 ```
 
-All HTML templates are embedded into the binary via `//go:embed` — the resulting executable is fully self-contained, no extra files needed.
+---
 
-## Security Notes
+## Security notes
 
-- The Admin server binds exclusively to `127.0.0.1` — it is never reachable by peers.
-- No authentication is implemented — intended for use on trusted LANs or VPNs (e.g. WireGuard).
-- Each file upload overwrites the previous selection; only one file can be served at a time.
+- Admin server listens on **`127.0.0.1` only** — not accessible from outside
+- No authentication — use only on trusted networks (LAN, VPN)
+- Filenames are sanitized with `filepath.Base` on save to prevent path traversal
 
-## License
-
-MIT
+# Screenshots
+![fileshare download](screenshots\fileshare-download.png?raw=true "fileshare download")
+![fileshare receive](screenshots\fileshare-receive.png?raw=true "fileshare receive")
+![fileshare send1](screenshots\fileshare-send1.png?raw=true "fileshare send1")
+![fileshare send2](screenshots\fileshare-send2.png?raw=true "fileshare send2")
