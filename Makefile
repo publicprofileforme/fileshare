@@ -9,7 +9,7 @@ all: windows linux-amd64 linux-arm mac-arm mac-x86
 
 windows:
 	@mkdir -p $(OUTDIR)
-	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(OUTDIR)/$(APP).exe .
+	GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o $(OUTDIR)/$(APP)-windows-amd64.exe .
 	@echo "  built  $(OUTDIR)/$(APP)-windows-amd64.exe"
 
 linux-amd64:
@@ -19,12 +19,12 @@ linux-amd64:
 
 linux-arm:
 	@mkdir -p $(OUTDIR)
-	GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "$(LDFLAGS)" -o $(OUTDIR)/$(APP)-linux-arm .
+	GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "$(LDFLAGS)" -o $(OUTDIR)/$(APP)-linux-arm7 .
 	@echo "  built  $(OUTDIR)/$(APP)-linux-arm7"
 
 mac-arm:
 	@mkdir -p $(OUTDIR)
-	GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(OUTDIR)/$(APP)-mac-arm .
+	GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o $(OUTDIR)/$(APP)-mac-arm64 .
 	@echo "  built  $(OUTDIR)/$(APP)-mac-arm64"
 
 mac-x86:

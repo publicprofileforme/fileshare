@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fileshare · login</title>
+<style>
+:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54;--error:#a12c7b}
+[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b;--error:#d163a7}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;font-size:15px;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:2rem 1rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:360px;display:flex;flex-direction:column;gap:1.25rem}
+h1{font-size:1.15rem;font-weight:600;display:flex;align-items:center;gap:.6rem}
+.field{display:flex;flex-direction:column;gap:.4rem}
+label{font-size:.8rem;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+input[type=password]{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.65rem .9rem;color:var(--text);font-size:.95rem;width:100%;transition:border-color .18s;outline:none}
+input[type=password]:focus{border-color:var(--primary)}
+.btn{border:none;border-radius:8px;padding:.7rem 1.2rem;font-size:.9rem;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;width:100%;transition:background .18s}
+.btn:hover{background:var(--primary-h)}
+.error{padding:.65rem .9rem;border-radius:7px;font-size:.85rem;background:color-mix(in oklch,var(--error) 12%,var(--surface));border:1px solid color-mix(in oklch,var(--error) 30%,var(--border));color:var(--error)}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    fileshare · login
+  </h1>
+  {{if .Error}}
+  <div class="error">{{.Error}}</div>
+  {{end}}
+  <form method="POST" action="/login">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <div class="field">
+      <label for="pwd">Password</label>
+      <input type="password" id="pwd" name="password" autofocus autocomplete="current-password" placeholder="Enter password…">
+    </div>
+    <br>
+    <button type="submit" class="btn">Sign in</button>
+  </form>
+</div>
+</body>
+</html>
