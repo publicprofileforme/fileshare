@@ -1,20 +1,23 @@
 # fileshare
 
-Утилита для быстрой передачи файлов и текста по локальной сети или VPN между двумя компьютерами. Написана на Go, без зависимостей — только стандартная библиотека.
+Утилита для быстрой передачи файлов и текста по локальной сети или VPN. Написана на Go, без зависимостей — только стандартная библиотека.
 
 ---
 
 ## Возможности
 
-- **Send** — отдача файла или текста другому человеку
-- **Receive** — приём файлов и текстовых сообщений через браузер
-- Оба сервера запускаются одновременно по умолчанию
-- Drag & drop загрузка файлов
-- Копирование текста в один клик (работает по `http://` на Windows)
-- Автоматический поллинг на стороне клиента — страница обновляется как только файл или текст становится доступен
-- Лог входящих текстовых сообщений с временны́ми метками
+- **Send** — раздача одного или нескольких файлов другому человеку
+  - 1 файл → прямое скачивание
+  - 2+ файла → ZIP-стрим на лету, без записи на диск
+- **Receive** — приём файлов и текста через браузер
+  - Drag & drop файлов и папок (с сохранением структуры директорий)
+  - Кнопка «Select folder» — активна в Chromium-браузерах (Chrome, Edge, Opera); в остальных — серая с подсказкой
+  - Множественный выбор файлов через пикер
+- Передача текста в обоих направлениях
+- Лог входящих текстовых сообщений с временны́ми метками и кнопкой «Copy»
+- Автоматический поллинг на клиенте — страница обновляется как только файл или текст становится доступен
 - Graceful shutdown по `Ctrl+C` / `SIGTERM`
-- Дедупликация имён файлов при сохранении
+- Дедупликация имён файлов при сохранении (суффикс `_YYYY-MM-DD_HH-MM-SS`)
 - Все шаблоны вшиты в бинарь через `//go:embed` — один файл, никаких зависимостей
 
 ---
@@ -53,11 +56,14 @@ go build -o fileshare .
 # Оба режима (по умолчанию)
 ./fileshare
 
-# Только приём файлов
+# Только приём
 ./fileshare --no-send
 
-# Только отдача, файл указан сразу (headless)
+# Только отдача, файл задан сразу (headless)
 ./fileshare --no-receive --file /home/user/archive.tar.gz
+
+# Несколько файлов в headless-режиме
+./fileshare --no-receive --file /home/user/a.txt,/home/user/b.zip
 
 # Свои порты
 ./fileshare --send-port 9090 --admin-port 9091 --receive-port 9092
@@ -74,7 +80,7 @@ go build -o fileshare .
 | `--admin-port` | `8081` | Порт админки send (только localhost) |
 | `--receive-port` | `8082` | Порт приёма файлов (все интерфейсы) |
 | `--dir` | `~/Downloads/Uploads` | Папка для принятых файлов |
-| `--file` | — | Путь к файлу для раздачи (headless-режим) |
+| `--file` | — | Путь к файлу(ам) для раздачи, через запятую (headless) |
 | `--no-send` | `false` | Отключить сервер отдачи |
 | `--no-receive` | `false` | Отключить сервер приёма |
 
@@ -86,14 +92,21 @@ go build -o fileshare .
 
 | Сервер | Адрес | Для кого |
 |---|---|---|
-| Admin | `localhost:<admin-port>` | Ты — выбираешь файл или вводишь текст |
-| Client | `0.0.0.0:<send-port>` | Второй человек — скачивает или копирует |
+| Admin | `localhost:<admin-port>` | Ты — выбираешь файлы или вводишь текст |
+| Client | `0.0.0.0:<send-port>` | Второй человек — скачивает |
 
-**GUI-режим** (по умолчанию): открой `http://localhost:8081` → укажи путь к файлу или введи текст → клиент увидит его автоматически.
+**GUI-режим**: открой `http://localhost:8081` → загрузи файлы или введи текст → клиент увидит автоматически.
 
-**Headless-режим** (`--file`): файл сразу доступен после запуска, без открытия браузера.
+**Headless-режим** (`--file`): файлы сразу доступны после запуска, без открытия браузера. Несколько файлов — через запятую.
 
-Клиентская страница автоматически опрашивает сервер и обновляется как только появляется файл или текст.
+Поведение клиентской страницы:
+
+| Ситуация | Что видит клиент |
+|---|---|
+| 1 файл | Имя, размер, кнопка **Download** |
+| 2+ файла | Список файлов, общий размер, кнопка **Download all as ZIP** |
+| Текст | Сообщение, кнопка **Copy** |
+| Ничего | Экран ожидания, автообновление |
 
 ---
 
@@ -103,10 +116,16 @@ go build -o fileshare .
 
 Второй человек открывает `http://<твой_ip>:8082` и видит две вкладки:
 
-- **Files** — drag & drop или выбор файлов, кнопка «Send files»
-- **Text** — ввод текста, кнопка «Send text», лог входящих сообщений с кнопкой «Copy» у каждого
+**Files**
+- Drag & drop файлов и папок — структура папки сохраняется на диске
+- Кнопка **Select files** — множественный выбор, все браузеры
+- Кнопка **Select folder** — выбор папки целиком; активна только в Chromium (Chrome, Edge, Opera), в остальных браузерах кнопка серая с tooltip-объяснением
 
-Принятые файлы сохраняются в `--dir`. Если файл с таким именем уже существует, к имени добавляется временна́я метка `_YYYY-MM-DD_HH-MM-SS`.
+**Text**
+- Поле ввода + кнопка **Send text**
+- Лог входящих сообщений с временны́ми метками и кнопкой **Copy** у каждого
+
+Принятые файлы сохраняются в `--dir`. Вложенность папок сохраняется. При конфликте имён добавляется суффикс `_YYYY-MM-DD_HH-MM-SS`.
 
 ---
 
@@ -119,7 +138,7 @@ fileshare/
 └── templates/
     ├── send_admin.html    # Админка (localhost)
     ├── send_client.html   # Клиент скачивания
-    └── receive.html       # Страница загрузки файлов и текста
+    └── receive.html       # Загрузка файлов и текста
 ```
 
 ---
@@ -128,7 +147,7 @@ fileshare/
 
 - Admin-сервер слушает **только на `127.0.0.1`** — недоступен снаружи
 - Аутентификации нет — используй только в доверенных сетях (LAN, VPN)
-- Имена файлов при сохранении обрабатываются через `filepath.Base` для защиты от path traversal
+- Имена файлов при сохранении обрабатываются через `filepath.Base` + `sanitizeRelPath` — защита от path traversal
 
 ---
 
@@ -136,22 +155,25 @@ fileshare/
 
 # fileshare
 
-A utility for fast file and text transfer over a local network or VPN between two computers. Written in Go, zero dependencies — standard library only.
+A utility for fast file and text transfer over a local network or VPN. Written in Go, zero dependencies — standard library only.
 
 ---
 
 ## Features
 
-- **Send** — share a file or text with another person
-- **Receive** — accept files and text messages via browser
-- Both servers run simultaneously by default
-- Drag & drop file upload
-- One-click text copy (works over `http://` on Windows)
-- Automatic client-side polling — page updates as soon as a file or text becomes available
-- Incoming text message log with timestamps
+- **Send** — share one or multiple files with another person
+  - 1 file → direct download
+  - 2+ files → on-the-fly ZIP stream, no temp file on disk
+- **Receive** — accept files and text via browser
+  - Drag & drop files and folders (preserves directory structure)
+  - «Select folder» button — active in Chromium browsers (Chrome, Edge, Opera); disabled with tooltip in others
+  - Multi-file picker
+- Text sharing in both directions
+- Incoming text message log with timestamps and per-message copy button
+- Automatic client-side polling — page refreshes as soon as a file or text becomes available
 - Graceful shutdown on `Ctrl+C` / `SIGTERM`
-- Filename deduplication on save
-- All templates embedded in the binary via `//go:embed` — single file, no runtime dependencies
+- Filename deduplication on save (`_YYYY-MM-DD_HH-MM-SS` suffix)
+- All templates embedded via `//go:embed` — single binary, no runtime dependencies
 
 ---
 
@@ -192,8 +214,11 @@ go build -o fileshare .
 # Receive only
 ./fileshare --no-send
 
-# Send only, file specified immediately (headless)
+# Send only, headless
 ./fileshare --no-receive --file /home/user/archive.tar.gz
+
+# Multiple files, headless
+./fileshare --no-receive --file /home/user/a.txt,/home/user/b.zip
 
 # Custom ports
 ./fileshare --send-port 9090 --admin-port 9091 --receive-port 9092
@@ -210,7 +235,7 @@ go build -o fileshare .
 | `--admin-port` | `8081` | Send admin port (localhost only) |
 | `--receive-port` | `8082` | File receive port (all interfaces) |
 | `--dir` | `~/Downloads/Uploads` | Directory for received files |
-| `--file` | — | File path to share (headless mode) |
+| `--file` | — | Comma-separated file paths to share (headless) |
 | `--no-send` | `false` | Disable send server |
 | `--no-receive` | `false` | Disable receive server |
 
@@ -218,31 +243,44 @@ go build -o fileshare .
 
 ## Send mode
 
-Runs two HTTP servers:
+Two HTTP servers:
 
 | Server | Address | Who |
 |---|---|---|
-| Admin | `localhost:<admin-port>` | You — select file or enter text |
-| Client | `0.0.0.0:<send-port>` | Other person — downloads or copies |
+| Admin | `localhost:<admin-port>` | You — select files or enter text |
+| Client | `0.0.0.0:<send-port>` | Other person — downloads |
 
-**GUI mode** (default): open `http://localhost:8081` → enter file path or type text → client sees it automatically.
+**GUI mode**: open `http://localhost:8081` → upload files or type text → client sees it automatically.
 
-**Headless mode** (`--file`): file is immediately available after launch, no browser needed.
+**Headless mode** (`--file`): files are immediately available. Multiple files via comma: `--file a.txt,b.zip`.
 
-The client page polls the server automatically and refreshes as soon as a file or text is available.
+Client page behaviour:
+
+| Situation | Client sees |
+|---|---|
+| 1 file | Name, size, **Download** button |
+| 2+ files | File list, total size, **Download all as ZIP** button |
+| Text | Message, **Copy** button |
+| Nothing | Waiting screen, auto-polls |
 
 ---
 
 ## Receive mode
 
-Runs a single HTTP server on `0.0.0.0:<receive-port>`.
+Single HTTP server on `0.0.0.0:<receive-port>`.
 
 The other person opens `http://<your_ip>:8082` and sees two tabs:
 
-- **Files** — drag & drop or file picker, «Send files» button
-- **Text** — text input, «Send text» button, incoming message log with «Copy» button on each entry
+**Files**
+- Drag & drop files and folders — directory structure preserved on disk
+- **Select files** button — multi-select, all browsers
+- **Select folder** button — picks entire folder; active only in Chromium (Chrome, Edge, Opera), disabled with tooltip in other browsers
 
-Received files are saved to `--dir`. If a file with the same name already exists, a timestamp `_YYYY-MM-DD_HH-MM-SS` is appended.
+**Text**
+- Input field + **Send text** button
+- Incoming message log with timestamps and per-message **Copy** button
+
+Received files are saved to `--dir`. Folder structure is preserved. On name conflict a `_YYYY-MM-DD_HH-MM-SS` suffix is added.
 
 ---
 
@@ -255,19 +293,13 @@ fileshare/
 └── templates/
     ├── send_admin.html    # Admin UI (localhost)
     ├── send_client.html   # Download client page
-    └── receive.html       # File and text upload page
+    └── receive.html       # Upload page
 ```
 
 ---
 
 ## Security notes
 
-- Admin server listens on **`127.0.0.1` only** — not accessible from outside
+- Admin server listens on **`127.0.0.1` only** — not reachable from outside
 - No authentication — use only on trusted networks (LAN, VPN)
-- Filenames are sanitized with `filepath.Base` on save to prevent path traversal
-
-# Screenshots
-![fileshare download](screenshots\fileshare-download.png?raw=true "fileshare download")
-![fileshare receive](screenshots\fileshare-receive.png?raw=true "fileshare receive")
-![fileshare send1](screenshots\fileshare-send1.png?raw=true "fileshare send1")
-![fileshare send2](screenshots\fileshare-send2.png?raw=true "fileshare send2")
+- Filenames are sanitized via `filepath.Base` + `sanitizeRelPath` to prevent path traversal

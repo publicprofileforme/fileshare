@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"embed"
 	"encoding/json"
@@ -74,6 +75,27 @@ func defaultSaveDir() string {
 	return filepath.Join(home, "Downloads", "Uploads")
 }
 
+// sanitizeRelPath strips leading slashes/dots and cleans the relative path.
+// Used to preserve folder structure on upload without path traversal.
+func sanitizeRelPath(rel string) string {
+	// Normalize separators
+	rel = filepath.FromSlash(rel)
+	rel = filepath.Clean(rel)
+	// Strip any leading ".." components
+	parts := strings.Split(rel, string(filepath.Separator))
+	var safe []string
+	for _, p := range parts {
+		if p == ".." || p == "." || p == "" {
+			continue
+		}
+		safe = append(safe, p)
+	}
+	if len(safe) == 0 {
+		return "file"
+	}
+	return filepath.Join(safe...)
+}
+
 // ─── Send state ───────────────────────────────────────────────────────────────
 
 type sendMode int
@@ -84,49 +106,79 @@ const (
 	modeText
 )
 
-type sendState struct {
-	mu       sync.RWMutex
-	mode     sendMode
-	// file
-	filePath string
-	fileName string
-	fileSize int64
-	// text
-	text string
+// sendFileEntry holds one file in the send list.
+type sendFileEntry struct {
+	Path string
+	Name string // display name
+	Size int64
 }
 
-func (s *sendState) setFile(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return fmt.Errorf("path is a directory")
-	}
+type sendState struct {
+	mu      sync.RWMutex
+	mode    sendMode
+	files   []sendFileEntry // 1 or more files
+	text    string
+	zipName string // precomputed zip filename
+}
+
+func (s *sendState) setFiles(entries []sendFileEntry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mode     = modeFile
-	s.filePath = path
-	s.fileName = filepath.Base(path)
-	s.fileSize = info.Size()
-	s.text     = ""
-	return nil
+	s.mode = modeFile
+	s.files = entries
+	s.text = ""
+	if len(entries) == 1 {
+		s.zipName = ""
+	} else {
+		s.zipName = "files_" + time.Now().Format("20060102_150405") + ".zip"
+	}
 }
 
 func (s *sendState) setText(text string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mode     = modeText
-	s.text     = text
-	s.filePath = ""
-	s.fileName = ""
-	s.fileSize = 0
+	s.mode    = modeText
+	s.text    = text
+	s.files   = nil
+	s.zipName = ""
 }
 
-func (s *sendState) snapshot() (mode sendMode, filePath, fileName, text string, fileSize int64) {
+func (s *sendState) clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mode    = modeIdle
+	s.files   = nil
+	s.text    = ""
+	s.zipName = ""
+}
+
+type sendSnapshot struct {
+	Mode    sendMode
+	Files   []sendFileEntry
+	Text    string
+	ZipName string
+	// Computed helpers
+	TotalSize int64
+	FileCount int
+}
+
+func (s *sendState) snapshot() sendSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.mode, s.filePath, s.fileName, s.text, s.fileSize
+	cp := make([]sendFileEntry, len(s.files))
+	copy(cp, s.files)
+	var total int64
+	for _, f := range cp {
+		total += f.Size
+	}
+	return sendSnapshot{
+		Mode:      s.mode,
+		Files:     cp,
+		Text:      s.text,
+		ZipName:   s.zipName,
+		TotalSize: total,
+		FileCount: len(cp),
+	}
 }
 
 // ─── Received text log ────────────────────────────────────────────────────────
@@ -176,24 +228,33 @@ func (srv *sendServer) registerAdminRoutes(mux *http.ServeMux) {
 			http.NotFound(w, r)
 			return
 		}
-		mode, _, fileName, text, fileSize := srv.state.snapshot()
+		snap := srv.state.snapshot()
+		var firstName, firstSize string
+		if len(snap.Files) > 0 {
+			firstName = snap.Files[0].Name
+			firstSize = humanSize(snap.Files[0].Size)
+		}
 		data := map[string]interface{}{
 			"ClientPort": srv.clientPort,
 			"IPs":        localIPs(),
 			"Headless":   srv.headless,
-			"Mode":       mode,
+			"Mode":       snap.Mode,
 			"ModeFile":   modeFile,
 			"ModeText":   modeText,
-			"FileName":   fileName,
-			"FileSize":   humanSize(fileSize),
-			"Text":       text,
+			"Files":      snap.Files,
+			"FileCount":  snap.FileCount,
+			"TotalSize":  humanSize(snap.TotalSize),
+			"ZipName":    snap.ZipName,
+			"FileName":   firstName,
+			"FileSize":   firstSize,
+			"Text":       snap.Text,
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		srv.tmpl.ExecuteTemplate(w, "send_admin.html", data)
 	})
 
-	// Upload file via browser
-	mux.HandleFunc("/api/upload-file", func(w http.ResponseWriter, r *http.Request) {
+	// Upload files via browser (GUI mode)
+	mux.HandleFunc("/api/upload-files", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)
 			return
@@ -202,63 +263,97 @@ func (srv *sendServer) registerAdminRoutes(mux *http.ServeMux) {
 			http.Error(w, "parse error: "+err.Error(), 400)
 			return
 		}
-		fhs := r.MultipartForm.File["file"]
+		fhs := r.MultipartForm.File["files"]
 		if len(fhs) == 0 {
-			http.Error(w, "no file", 400)
+			http.Error(w, "no files", 400)
 			return
 		}
-		fh := fhs[0]
-		src, err := fh.Open()
-		if err != nil {
-			http.Error(w, err.Error(), 500)
+		var entries []sendFileEntry
+		for _, fh := range fhs {
+			src, err := fh.Open()
+			if err != nil {
+				continue
+			}
+			safeName := filepath.Base(fh.Filename)
+			dst := filepath.Join(srv.tmpDir, safeTimestamp()+"_"+safeName)
+			out, err := os.Create(dst)
+			if err != nil {
+				src.Close()
+				continue
+			}
+			io.Copy(out, src)
+			out.Close()
+			src.Close()
+			info, _ := os.Stat(dst)
+			entries = append(entries, sendFileEntry{
+				Path: dst,
+				Name: safeName,
+				Size: info.Size(),
+			})
+		}
+		if len(entries) == 0 {
+			http.Error(w, "failed to save files", 500)
 			return
 		}
-		defer src.Close()
-		safeName := filepath.Base(fh.Filename)
-		dst := filepath.Join(srv.tmpDir, safeName)
-		out, err := os.Create(dst)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		io.Copy(out, src)
-		out.Close()
-		if err := srv.state.setFile(dst); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		_, _, fileName, _, fileSize := srv.state.snapshot()
-		fmt.Printf("[send]  file: %s (%s)\n", fileName, humanSize(fileSize))
+		srv.state.setFiles(entries)
+		snap := srv.state.snapshot()
+		fmt.Printf("[send]  %d file(s) ready (%s)\n", snap.FileCount, humanSize(snap.TotalSize))
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"name": fileName,
-			"size": humanSize(fileSize),
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"count":   snap.FileCount,
+			"total":   humanSize(snap.TotalSize),
+			"zipName": snap.ZipName,
+			"files":   snap.Files,
 		})
 	})
 
-	// Set file by path (headless)
+	// Set file by path (headless / path input)
 	mux.HandleFunc("/api/select", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
 		var body struct {
+			Paths []string `json:"paths"`
+			// legacy single-path support
 			Path string `json:"path"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Path == "" {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "bad request", 400)
 			return
 		}
-		if err := srv.state.setFile(body.Path); err != nil {
-			http.Error(w, err.Error(), 400)
+		if body.Path != "" && len(body.Paths) == 0 {
+			body.Paths = []string{body.Path}
+		}
+		if len(body.Paths) == 0 {
+			http.Error(w, "no paths", 400)
 			return
 		}
-		_, _, fileName, _, fileSize := srv.state.snapshot()
-		fmt.Printf("[send]  file: %s (%s)\n", fileName, humanSize(fileSize))
+		var entries []sendFileEntry
+		for _, p := range body.Paths {
+			info, err := os.Stat(p)
+			if err != nil || info.IsDir() {
+				continue
+			}
+			entries = append(entries, sendFileEntry{
+				Path: p,
+				Name: filepath.Base(p),
+				Size: info.Size(),
+			})
+		}
+		if len(entries) == 0 {
+			http.Error(w, "no valid files", 400)
+			return
+		}
+		srv.state.setFiles(entries)
+		snap := srv.state.snapshot()
+		fmt.Printf("[send]  %d file(s) set (%s)\n", snap.FileCount, humanSize(snap.TotalSize))
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"name": fileName,
-			"size": humanSize(fileSize),
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"count":   snap.FileCount,
+			"total":   humanSize(snap.TotalSize),
+			"zipName": snap.ZipName,
+			"files":   snap.Files,
 		})
 	})
 
@@ -285,15 +380,27 @@ func (srv *sendServer) registerAdminRoutes(mux *http.ServeMux) {
 		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
 
+	// Clear
+	mux.HandleFunc("/api/clear", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		srv.state.clear()
+		w.WriteHeader(204)
+	})
+
 	// Status
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		mode, _, fileName, text, fileSize := srv.state.snapshot()
+		snap := srv.state.snapshot()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"mode":     mode,
-			"fileName": fileName,
-			"fileSize": humanSize(fileSize),
-			"text":     text,
+			"mode":      snap.Mode,
+			"fileCount": snap.FileCount,
+			"totalSize": humanSize(snap.TotalSize),
+			"zipName":   snap.ZipName,
+			"files":     snap.Files,
+			"text":      snap.Text,
 		})
 	})
 }
@@ -304,46 +411,91 @@ func (srv *sendServer) registerClientRoutes(mux *http.ServeMux) {
 			http.NotFound(w, r)
 			return
 		}
-		mode, _, fileName, text, fileSize := srv.state.snapshot()
+		snap := srv.state.snapshot()
 		data := map[string]interface{}{
-			"Mode":     mode,
-			"ModeFile": modeFile,
-			"ModeText": modeText,
-			"FileName": fileName,
-			"FileSize": humanSize(fileSize),
-			"Text":     text,
+			"Mode":      snap.Mode,
+			"ModeFile":  modeFile,
+			"ModeText":  modeText,
+			"Files":     snap.Files,
+			"FileCount": snap.FileCount,
+			"TotalSize": humanSize(snap.TotalSize),
+			"ZipName":   snap.ZipName,
+			"Text":      snap.Text,
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		srv.tmpl.ExecuteTemplate(w, "send_client.html", data)
 	})
 
-	mux.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
-		mode, filePath, fileName, _, fileSize := srv.state.snapshot()
-		if mode != modeFile {
+	// Single file download
+	mux.HandleFunc("/download/", func(w http.ResponseWriter, r *http.Request) {
+		snap := srv.state.snapshot()
+		if snap.Mode != modeFile {
 			http.Error(w, "no file available", 503)
 			return
 		}
-		f, err := os.Open(filePath)
+		// /download/0, /download/1, ...
+		idxStr := strings.TrimPrefix(r.URL.Path, "/download/")
+		idx, err := strconv.Atoi(idxStr)
+		if err != nil || idx < 0 || idx >= len(snap.Files) {
+			http.Error(w, "not found", 404)
+			return
+		}
+		entry := snap.Files[idx]
+		f, err := os.Open(entry.Path)
 		if err != nil {
 			http.Error(w, "file not found", 404)
 			return
 		}
 		defer f.Close()
-		w.Header().Set("Content-Disposition", `attachment; filename="`+fileName+`"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="`+entry.Name+`"`)
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
+		w.Header().Set("Content-Length", strconv.FormatInt(entry.Size, 10))
 		io.Copy(w, f)
+		fmt.Printf("[send]  downloaded: %s\n", entry.Name)
 	})
 
-	// Poll for client (auto-refresh when idle)
+	// ZIP download — streams all files into a zip without temp file
+	mux.HandleFunc("/download-zip", func(w http.ResponseWriter, r *http.Request) {
+		snap := srv.state.snapshot()
+		if snap.Mode != modeFile || len(snap.Files) == 0 {
+			http.Error(w, "no files available", 503)
+			return
+		}
+		zipName := snap.ZipName
+		if zipName == "" {
+			zipName = snap.Files[0].Name + ".zip"
+		}
+		w.Header().Set("Content-Disposition", `attachment; filename="`+zipName+`"`)
+		w.Header().Set("Content-Type", "application/zip")
+		// Cannot set Content-Length because we stream; that's fine.
+		zw := zip.NewWriter(w)
+		defer zw.Close()
+		for _, entry := range snap.Files {
+			fw, err := zw.Create(entry.Name)
+			if err != nil {
+				continue
+			}
+			f, err := os.Open(entry.Path)
+			if err != nil {
+				continue
+			}
+			io.Copy(fw, f)
+			f.Close()
+		}
+		fmt.Printf("[send]  zip downloaded (%d files)\n", len(snap.Files))
+	})
+
+	// Poll status
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		mode, _, fileName, text, fileSize := srv.state.snapshot()
+		snap := srv.state.snapshot()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"mode":     mode,
-			"fileName": fileName,
-			"fileSize": humanSize(fileSize),
-			"text":     text,
+			"mode":      snap.Mode,
+			"fileCount": snap.FileCount,
+			"totalSize": humanSize(snap.TotalSize),
+			"zipName":   snap.ZipName,
+			"files":     snap.Files,
+			"text":      snap.Text,
 		})
 	})
 }
@@ -372,33 +524,46 @@ func (srv *receiveServer) registerRoutes(mux *http.ServeMux) {
 		srv.tmpl.ExecuteTemplate(w, "receive.html", data)
 	})
 
-	// File upload
+	// File upload — supports relative paths for folder uploads
 	mux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
-		if err := r.ParseMultipartForm(4 << 30); err != nil {
+		if err := r.ParseMultipartForm(8 << 30); err != nil {
 			http.Error(w, "parse error: "+err.Error(), 400)
 			return
 		}
-		files := r.MultipartForm.File["files"]
-		if len(files) == 0 {
+		// "files" field carries flat files; "relpaths" field carries matching relative paths
+		fhs := r.MultipartForm.File["files"]
+		relPaths := r.MultipartForm.Value["relpaths"]
+		if len(fhs) == 0 {
 			http.Error(w, "no files", 400)
 			return
 		}
 		var saved []string
-		for _, fh := range files {
+		for i, fh := range fhs {
 			src, err := fh.Open()
 			if err != nil {
 				continue
 			}
-			safeName := filepath.Base(fh.Filename)
-			dst := filepath.Join(srv.saveDir, safeName)
+			var relPath string
+			if i < len(relPaths) && relPaths[i] != "" {
+				relPath = sanitizeRelPath(relPaths[i])
+			} else {
+				relPath = filepath.Base(fh.Filename)
+			}
+			dst := filepath.Join(srv.saveDir, relPath)
+			// Ensure parent dirs exist (for folder uploads)
+			if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+				src.Close()
+				continue
+			}
+			// Deduplicate
 			if _, err := os.Stat(dst); err == nil {
-				ext := filepath.Ext(safeName)
-				base := strings.TrimSuffix(safeName, ext)
-				dst = filepath.Join(srv.saveDir, base+"_"+safeTimestamp()+ext)
+				ext := filepath.Ext(relPath)
+				base := strings.TrimSuffix(dst, ext)
+				dst = base + "_" + safeTimestamp() + ext
 			}
 			out, err := os.Create(dst)
 			if err != nil {
@@ -408,8 +573,8 @@ func (srv *receiveServer) registerRoutes(mux *http.ServeMux) {
 			io.Copy(out, src)
 			out.Close()
 			src.Close()
-			fmt.Printf("[recv]  file saved: %s\n", dst)
-			saved = append(saved, filepath.Base(dst))
+			fmt.Printf("[recv]  saved: %s\n", dst)
+			saved = append(saved, relPath)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"saved": saved})
@@ -424,22 +589,16 @@ func (srv *receiveServer) registerRoutes(mux *http.ServeMux) {
 		var body struct {
 			Text string `json:"text"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Text) == "" {
 			http.Error(w, "bad request", 400)
 			return
 		}
-		text := strings.TrimSpace(body.Text)
-		if text == "" {
-			http.Error(w, "empty text", 400)
-			return
-		}
-		srv.log.add(text)
-		fmt.Printf("[recv]  text (%d chars): %s\n", len(text), truncate(text, 80))
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		srv.log.add(body.Text)
+		fmt.Printf("[recv]  text (%d chars): %s\n", len(body.Text), truncate(body.Text, 60))
+		w.WriteHeader(204)
 	})
 
-	// Text log poll
+	// Text log
 	mux.HandleFunc("/api/texts", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(srv.log.all())
@@ -450,7 +609,7 @@ func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return s[:n] + "..."
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -460,37 +619,51 @@ func main() {
 	adminPort   := flag.Int("admin-port",   8081, "admin UI port (localhost only)")
 	receivePort := flag.Int("receive-port", 8082, "receive/upload port (all interfaces)")
 	receiveDir  := flag.String("dir",       defaultSaveDir(), "directory for received files")
-	filePath    := flag.String("file",      "",   "file to share — enables headless send mode")
+	filePaths   := flag.String("file",      "", "comma-separated file paths to share (headless)")
 	noSend      := flag.Bool("no-send",     false, "disable send server")
 	noReceive   := flag.Bool("no-receive",  false, "disable receive server")
 	flag.Parse()
 
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"humanSize": humanSize,
+		"add":       func(a, b int) int { return a + b },
 	}).ParseFS(templateFS, "templates/*.html")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "template error: %v\n", err)
 		os.Exit(1)
 	}
 
-	headless := *filePath != ""
+	headless := *filePaths != ""
 	var servers []*http.Server
 	var wg sync.WaitGroup
 
 	// ── Send ─────────────────────────────────────────
 	if !*noSend {
-		tmpDir, err := os.MkdirTemp("", "fileshare-send-*")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "cannot create tmp dir: %v\n", err)
-			os.Exit(1)
-		}
+		tmpDir, _ := os.MkdirTemp("", "fileshare-send-*")
 		state := &sendState{}
+
 		if headless {
-			if err := state.setFile(*filePath); err != nil {
-				fmt.Fprintf(os.Stderr, "cannot load file: %v\n", err)
+			var entries []sendFileEntry
+			for _, p := range strings.Split(*filePaths, ",") {
+				p = strings.TrimSpace(p)
+				info, err := os.Stat(p)
+				if err != nil || info.IsDir() {
+					fmt.Fprintf(os.Stderr, "skipping: %s\n", p)
+					continue
+				}
+				entries = append(entries, sendFileEntry{
+					Path: p,
+					Name: filepath.Base(p),
+					Size: info.Size(),
+				})
+			}
+			if len(entries) == 0 {
+				fmt.Fprintf(os.Stderr, "no valid files to share\n")
 				os.Exit(1)
 			}
+			state.setFiles(entries)
 		}
+
 		ss := &sendServer{
 			state:      state,
 			adminPort:  *adminPort,
@@ -499,6 +672,7 @@ func main() {
 			headless:   headless,
 			tmpDir:     tmpDir,
 		}
+
 		adminMux := http.NewServeMux()
 		ss.registerAdminRoutes(adminMux)
 		adminSrv := &http.Server{Addr: fmt.Sprintf("127.0.0.1:%d", *adminPort), Handler: adminMux}
@@ -519,15 +693,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "cannot create dir: %v\n", err)
 			os.Exit(1)
 		}
-		rs := &receiveServer{
-			saveDir: *receiveDir,
-			port:    *receivePort,
-			tmpl:    tmpl,
-			log:     &textLog{},
-		}
-		recvMux := http.NewServeMux()
-		rs.registerRoutes(recvMux)
-		recvSrv := &http.Server{Addr: fmt.Sprintf("0.0.0.0:%d", *receivePort), Handler: recvMux}
+		tlog := &textLog{}
+		rs := &receiveServer{saveDir: *receiveDir, port: *receivePort, tmpl: tmpl, log: tlog}
+		mux := http.NewServeMux()
+		rs.registerRoutes(mux)
+		recvSrv := &http.Server{Addr: fmt.Sprintf("0.0.0.0:%d", *receivePort), Handler: mux}
 		servers = append(servers, recvSrv)
 		wg.Add(1)
 		go func() { defer wg.Done(); recvSrv.ListenAndServe() }()
@@ -545,7 +715,7 @@ func main() {
 	if !*noSend {
 		mode := "GUI"
 		if headless {
-			mode = "HEADLESS (--file)"
+			mode = "HEADLESS"
 		}
 		fmt.Printf("  [SEND]  Mode         : %s\n", mode)
 		fmt.Printf("          Admin (you)  : http://localhost:%d\n", *adminPort)
@@ -565,6 +735,7 @@ func main() {
 	fmt.Println("  Stop: Ctrl+C")
 	fmt.Println()
 
+	// ── Graceful shutdown ─────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit

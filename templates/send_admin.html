@@ -5,63 +5,63 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>fileshare · send</title>
 <style>
-:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54;--code-bg:#edeae5;--success:#437a22;--tab-active-bg:#fff}
-[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b;--code-bg:#22211f;--success:#6daa45;--tab-active-bg:#28271f}
+:root,[data-theme="light"]{--bg:#f7f6f2;--surface:#f0efeb;--border:#d4d1ca;--text:#28251d;--muted:#7a7974;--primary:#01696f;--primary-h:#0c4e54;--code-bg:#edeae5;--success:#437a22}
+[data-theme="dark"]{--bg:#171614;--surface:#1c1b19;--border:#393836;--text:#cdccca;--muted:#797876;--primary:#4f98a3;--primary-h:#227f8b;--code-bg:#22211f;--success:#6daa45}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;font-size:15px;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1rem}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:520px;display:flex;flex-direction:column;gap:1.25rem}
 h1{font-size:1.2rem;font-weight:600;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .badge{font-size:.7rem;font-weight:700;padding:.15rem .5rem;border-radius:99px;background:var(--primary);color:#fff;letter-spacing:.05em}
 .mode-badge{font-size:.7rem;padding:.15rem .5rem;border-radius:99px;border:1px solid var(--border);color:var(--muted)}
+label{font-size:.8rem;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:.4rem}
 
 /* Tabs */
 .tabs{display:flex;gap:2px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
-.tab{flex:1;padding:.45rem .8rem;border-radius:6px;border:none;background:none;color:var(--muted);font-size:.88rem;font-weight:500;cursor:pointer;transition:background .15s,color .15s;display:flex;align-items:center;justify-content:center;gap:.4rem}
-.tab.active{background:var(--tab-active-bg);color:var(--text);box-shadow:0 1px 3px oklch(0 0 0/.12)}
+.tab{flex:1;padding:.4rem .8rem;border-radius:6px;border:none;background:none;color:var(--muted);font-size:.88rem;font-weight:500;cursor:pointer;transition:background .15s,color .15s;display:flex;align-items:center;justify-content:center;gap:.4rem}
+.tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px oklch(0 0 0/.12)}
 .tab:hover:not(.active){color:var(--text)}
-
-/* Panels */
 .panel{display:none;flex-direction:column;gap:1rem}
 .panel.active{display:flex}
 
 /* Drop zone */
-.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:2rem 1.5rem;text-align:center;cursor:pointer;transition:background .18s,border-color .18s;display:flex;flex-direction:column;align-items:center;gap:.6rem;color:var(--muted)}
+.drop-zone{border:2px dashed var(--border);border-radius:10px;padding:1.75rem 1.5rem;text-align:center;cursor:pointer;transition:background .18s,border-color .18s;display:flex;flex-direction:column;align-items:center;gap:.5rem;color:var(--muted)}
 .drop-zone.over{background:color-mix(in oklch,var(--primary) 8%,var(--surface));border-color:var(--primary);color:var(--primary)}
 .drop-zone input{display:none}
 
-/* Textarea */
-textarea{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;color:var(--text);font-size:.95rem;width:100%;resize:vertical;min-height:120px;font-family:inherit;transition:border-color .18s;line-height:1.5}
+/* File list */
+.file-list{list-style:none;display:flex;flex-direction:column;gap:.3rem;max-height:200px;overflow-y:auto}
+.file-list li{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:.5rem .9rem;font-size:.88rem;display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+.file-list .nm{word-break:break-all}
+.file-list .sz{color:var(--muted);font-size:.78rem;white-space:nowrap}
+
+.summary{font-size:.85rem;color:var(--muted);display:flex;align-items:center;gap:.4rem}
+.summary strong{color:var(--text)}
+
+textarea{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;color:var(--text);font-size:.95rem;width:100%;resize:vertical;min-height:110px;font-family:inherit;transition:border-color .18s;line-height:1.5}
 textarea:focus{outline:none;border-color:var(--primary)}
 
 /* Buttons */
-.btn{border:none;border-radius:8px;padding:.65rem 1.2rem;font-size:.9rem;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;width:100%;transition:background .18s}
+.btn{border:none;border-radius:8px;padding:.65rem 1.1rem;font-size:.9rem;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;width:100%;transition:background .18s;display:flex;align-items:center;justify-content:center;gap:.5rem}
 .btn:hover{background:var(--primary-h)}
 .btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-row{display:flex;gap:.6rem}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text);width:auto;flex:1}
+.btn-ghost:hover{background:var(--bg)}
+
+/* Ready state */
+.ready-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.8rem}
+.url-label{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.url-box{background:var(--code-bg);border:1px solid var(--border);border-radius:7px;padding:.55rem .9rem;font-family:monospace;font-size:.82rem;word-break:break-all;color:var(--primary);cursor:pointer;transition:opacity .18s}
+.url-box:hover{opacity:.7}
 
 /* Progress */
-.progress-wrap{display:none;flex-direction:column;gap:.4rem}
-.progress-wrap.visible{display:flex}
-.progress-label{font-size:.82rem;color:var(--muted)}
-.progress-bar{height:4px;background:var(--border);border-radius:99px;overflow:hidden}
+.progress-bar{height:3px;background:var(--border);border-radius:99px;overflow:hidden;display:none}
 .progress-fill{height:100%;background:var(--primary);width:0;transition:width .25s}
 
-/* File / text result */
-.result-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;display:none;flex-direction:column;gap:.25rem}
-.result-box.visible{display:flex}
-.result-name{font-weight:600;word-break:break-all}
-.result-sub{font-size:.85rem;color:var(--muted)}
-
-/* URL section */
-.url-section{display:none;flex-direction:column;gap:.5rem}
-.url-section.visible{display:flex}
-.section-label{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
-.url-box{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:.6rem 1rem;font-family:monospace;font-size:.82rem;word-break:break-all;color:var(--primary);cursor:pointer;transition:opacity .15s}
-.url-box:hover{opacity:.75}
-.copy-hint{font-size:.75rem;color:var(--muted)}
-
+.result{padding:.65rem .9rem;border-radius:7px;font-size:.85rem;display:none}
+.result.ok{display:block;background:color-mix(in oklch,var(--success) 12%,var(--surface));border:1px solid color-mix(in oklch,var(--success) 30%,var(--border));color:var(--success)}
+.result.err{display:block;background:color-mix(in oklch,#a12c7b 12%,var(--surface));border:1px solid color-mix(in oklch,#a12c7b 30%,var(--border));color:#d163a7}
 hr{border:none;border-top:1px solid var(--border)}
-.status{font-size:.82rem;color:var(--muted);text-align:center}
-.status.ok{color:var(--success)}
 </style>
 </head>
 <body>
@@ -73,152 +73,176 @@ hr{border:none;border-top:1px solid var(--border)}
     <span class="mode-badge">{{if .Headless}}HEADLESS{{else}}GUI{{end}}</span>
   </h1>
 
-  {{if (eq .Headless false)}}
-  <!-- Tab switcher -->
+  {{if (eq .Mode .ModeFile)}}
+  <!-- Ready state -->
+  <div class="ready-box">
+    <ul class="file-list">
+      {{range .Files}}
+      <li><span class="nm">{{.Name}}</span><span class="sz">{{humanSize .Size}}</span></li>
+      {{end}}
+    </ul>
+    {{if gt .FileCount 1}}
+    <div class="summary">
+      <strong>{{.FileCount}} files</strong>
+      <span>·</span>
+      <span>{{.TotalSize}} total</span>
+      <span>·</span>
+      <span>will be zipped</span>
+    </div>
+    {{end}}
+    <hr>
+    <div class="url-label">Share link</div>
+    {{range .IPs}}
+    {{if eq $.FileCount 1}}
+    <div class="url-box" onclick="copyURL(this)" title="Click to copy">http://{{.}}:{{$.ClientPort}}/download/0</div>
+    {{else}}
+    <div class="url-box" onclick="copyURL(this)" title="Click to copy">http://{{.}}:{{$.ClientPort}}/download-zip</div>
+    {{end}}
+    {{end}}
+    {{if not .Headless}}
+    <button class="btn btn-ghost" onclick="clearFiles()" style="margin-top:.25rem">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      Clear
+    </button>
+    {{end}}
+  </div>
+
+  {{else if (eq .Mode .ModeText)}}
+  <!-- Text ready -->
+  <div class="ready-box">
+    <div style="font-size:.85rem;color:var(--muted)">Text is set and ready for client</div>
+    {{if not .Headless}}
+    <button class="btn btn-ghost" onclick="clearFiles()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      Clear
+    </button>
+    {{end}}
+  </div>
+
+  {{else if (not .Headless)}}
+  <!-- Idle: tabs -->
   <div class="tabs">
     <button class="tab active" id="tabFile" onclick="switchTab('file')">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-      File
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+      Files
     </button>
     <button class="tab" id="tabText" onclick="switchTab('text')">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       Text
     </button>
   </div>
 
   <!-- File panel -->
   <div class="panel active" id="panelFile">
-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <div class="drop-zone" id="dz" onclick="document.getElementById('fi').click()">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--primary)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      <span>Click to choose a file</span>
-      <span style="font-size:.82rem">or drag &amp; drop</span>
-      <input type="file" id="fileInput">
+      <span>Drag &amp; drop files here, or click to select</span>
+      <input type="file" id="fi" multiple>
     </div>
-    <div class="progress-wrap" id="progressWrap">
-      <div class="progress-label" id="progressLabel">Uploading…</div>
-      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-    </div>
+    <ul class="file-list" id="fl"></ul>
+    <div class="progress-bar" id="pb"><div class="progress-fill" id="pf"></div></div>
+    <button class="btn" id="uploadBtn" disabled onclick="uploadFiles()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Share files
+    </button>
+    <div class="result" id="fileResult"></div>
   </div>
 
   <!-- Text panel -->
   <div class="panel" id="panelText">
-    <textarea id="textInput" placeholder="Type or paste text here…" rows="5"></textarea>
-    <button class="btn" id="textBtn" onclick="sendText()">Set text</button>
+    <textarea id="textInput" placeholder="Type or paste text…" rows="5"></textarea>
+    <button class="btn" id="textBtn" onclick="setTextFn()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Share text
+    </button>
+    <div class="result" id="textResult"></div>
   </div>
   {{end}}
-
-  <!-- Current payload info -->
-  <div class="result-box{{if (eq .Mode .ModeFile)}} visible{{end}}{{if (eq .Mode .ModeText)}} visible{{end}}" id="resultBox">
-    <div class="result-name" id="resultName">
-      {{if (eq .Mode .ModeFile)}}{{.FileName}}{{end}}
-      {{if (eq .Mode .ModeText)}}Text message{{end}}
-    </div>
-    <div class="result-sub" id="resultSub">
-      {{if (eq .Mode .ModeFile)}}{{.FileSize}}{{end}}
-      {{if (eq .Mode .ModeText)}}{{len .Text}} chars — ready to copy{{end}}
-    </div>
-  </div>
-
-  <!-- Client links -->
-  <div class="url-section{{if (eq .Mode .ModeFile)}} visible{{end}}{{if (eq .Mode .ModeText)}} visible{{end}}" id="urlSection">
-    <hr>
-    <span class="section-label">Client link — share this</span>
-    {{range .IPs}}
-    <div class="url-box" onclick="copyURL(this)">http://{{.}}:{{$.ClientPort}}</div>
-    {{end}}
-    <div class="url-box" onclick="copyURL(this)">http://localhost:{{.ClientPort}}</div>
-    <span class="copy-hint">Click to copy</span>
-  </div>
-
-  <p class="status{{if (eq .Mode .ModeFile)}} ok{{end}}{{if (eq .Mode .ModeText)}} ok{{end}}" id="statusEl">
-    {{if (eq .Mode .ModeFile)}}✓ File ready for download{{else if (eq .Mode .ModeText)}}✓ Text ready{{else}}Nothing shared yet{{end}}
-  </p>
 </div>
 
 <script>
-// Tab switching
+// ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.getElementById('panelFile').classList.toggle('active', tab === 'file');
-  document.getElementById('panelText').classList.toggle('active', tab === 'text');
-  document.getElementById('tabFile').classList.toggle('active', tab === 'file');
-  document.getElementById('tabText').classList.toggle('active', tab === 'text');
-}
-
-// File upload via XHR
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-
-if (fileInput) {
-  fileInput.addEventListener('change', e => { if (e.target.files[0]) uploadFile(e.target.files[0]); });
-}
-if (dropZone) {
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault(); dropZone.classList.remove('over');
-    if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+  ['file','text'].forEach(t => {
+    document.getElementById('panel'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
+    document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
   });
 }
 
-function uploadFile(file) {
-  const pw = document.getElementById('progressWrap');
-  const pf = document.getElementById('progressFill');
-  const pl = document.getElementById('progressLabel');
-  dropZone.style.opacity = '.5'; dropZone.style.pointerEvents = 'none';
-  pw.classList.add('visible'); pf.style.width = '5%';
-  pl.textContent = 'Uploading ' + file.name + '…';
-  const fd = new FormData(); fd.append('file', file);
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/upload-file');
-  xhr.upload.onprogress = e => { if (e.lengthComputable) pf.style.width = (e.loaded/e.total*90)+'%'; };
-  xhr.onload = () => {
-    pf.style.width = '100%';
-    if (xhr.status === 200) {
-      const d = JSON.parse(xhr.responseText);
-      setResult(d.name, d.size);
-      pl.textContent = '✓ ' + d.name;
-    } else {
-      pl.textContent = '✗ ' + xhr.responseText;
-      pf.style.background = '#d163a7';
-    }
-    dropZone.style.opacity = ''; dropZone.style.pointerEvents = '';
-  };
-  xhr.onerror = () => { pl.textContent = '✗ Network error'; dropZone.style.opacity=''; dropZone.style.pointerEvents=''; };
-  xhr.send(fd);
+// ── File upload ───────────────────────────────────────────────────────────────
+let files = [];
+const fmt = n => { const u=['B','KB','MB','GB']; let i=0; while(n>=1024&&i<3){n/=1024;i++;} return n.toFixed(i?1:0)+' '+u[i]; };
+
+function renderList() {
+  const fl = document.getElementById('fl');
+  if (!fl) return;
+  fl.innerHTML = files.map(f => `<li><span class="nm">${f.name}</span><span class="sz">${fmt(f.size)}</span></li>`).join('');
+  document.getElementById('uploadBtn').disabled = files.length === 0;
 }
 
-// Text send
-async function sendText() {
+document.getElementById('fi')?.addEventListener('change', e => { files = [...e.target.files]; renderList(); });
+const dz = document.getElementById('dz');
+if (dz) {
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); files = [...e.dataTransfer.files]; renderList(); });
+}
+
+async function uploadFiles() {
+  if (!files.length) return;
+  const btn=document.getElementById('uploadBtn'), pb=document.getElementById('pb'),
+        pf=document.getElementById('pf'), res=document.getElementById('fileResult');
+  btn.disabled=true; pb.style.display='block'; pf.style.width='10%'; res.className='result';
+  const fd = new FormData();
+  files.forEach(f => fd.append('files', f));
+  try {
+    pf.style.width='50%';
+    const r = await fetch('/api/upload-files', {method:'POST', body:fd});
+    pf.style.width='100%';
+    if (r.ok) {
+      location.reload();
+    } else {
+      res.className='result err'; res.textContent='✗ '+(await r.text());
+      btn.disabled=false;
+    }
+  } catch(e) { res.className='result err'; res.textContent='✗ '+e.message; btn.disabled=false; }
+  setTimeout(()=>{ pb.style.display='none'; pf.style.width='0'; },1000);
+}
+
+// ── Text set ──────────────────────────────────────────────────────────────────
+async function setTextFn() {
   const text = document.getElementById('textInput').value.trim();
   if (!text) return;
-  const btn = document.getElementById('textBtn');
-  btn.disabled = true; btn.textContent = 'Setting…';
-  const r = await fetch('/api/set-text', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({text})
-  });
-  btn.disabled = false; btn.textContent = 'Set text';
-  if (r.ok) {
-    setResult('Text message', text.length + ' chars — ready to copy');
-  } else {
-    alert(await r.text());
-  }
+  const btn=document.getElementById('textBtn'), res=document.getElementById('textResult');
+  btn.disabled=true;
+  try {
+    const r = await fetch('/api/set-text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    if (r.ok) { location.reload(); }
+    else { res.className='result err'; res.textContent='✗ '+(await r.text()); btn.disabled=false; }
+  } catch(e) { res.className='result err'; res.textContent='✗ '+e.message; btn.disabled=false; }
 }
 
-function setResult(name, sub) {
-  document.getElementById('resultName').textContent = name;
-  document.getElementById('resultSub').textContent = sub;
-  document.getElementById('resultBox').classList.add('visible');
-  document.getElementById('urlSection').classList.add('visible');
-  document.getElementById('statusEl').textContent = '✓ Ready';
-  document.getElementById('statusEl').classList.add('ok');
+// ── Clear ─────────────────────────────────────────────────────────────────────
+async function clearFiles() {
+  await fetch('/api/clear', {method:'POST'});
+  location.reload();
 }
 
+// ── Copy URL ──────────────────────────────────────────────────────────────────
 function copyURL(el) {
-  navigator.clipboard.writeText(el.textContent.trim()).catch(() => {});
+  const text = el.textContent.trim();
   const orig = el.textContent;
-  el.textContent = '✓ copied!';
-  setTimeout(() => el.textContent = orig, 1500);
+  function done(ok) { el.textContent = ok ? '✓ copied!' : '✗ failed'; setTimeout(()=> el.textContent=orig, 1500); }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(()=>done(true)).catch(()=>fallback());
+  } else { fallback(); }
+  function fallback() {
+    const ta=document.createElement('textarea'); ta.value=text;
+    ta.style.cssText='position:fixed;top:0;left:0;width:2em;height:2em;opacity:0.01;z-index:9999';
+    document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0,ta.value.length);
+    let ok=false; try{ok=document.execCommand('copy');}catch(e){}
+    document.body.removeChild(ta); done(ok);
+  }
 }
 </script>
 </body>

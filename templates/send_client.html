@@ -12,15 +12,20 @@ body{font-family:system-ui,sans-serif;font-size:15px;background:var(--bg);color:
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;width:100%;max-width:460px;display:flex;flex-direction:column;gap:1.5rem;align-items:center;text-align:center}
 .icon{color:var(--primary)}
 h1{font-size:1.2rem;font-weight:600}
-.file-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;width:100%;text-align:left}
-.file-name{font-weight:600;word-break:break-all;margin-bottom:.25rem}
-.file-size{font-size:.85rem;color:var(--muted)}
-.text-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;width:100%;text-align:left;display:flex;flex-direction:column;gap:.6rem}
+.file-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.1rem;width:100%;text-align:left;display:flex;flex-direction:column;gap:.5rem}
+.file-list{list-style:none;display:flex;flex-direction:column;gap:.3rem;max-height:220px;overflow-y:auto}
+.file-list li{display:flex;justify-content:space-between;align-items:center;padding:.4rem .1rem;border-bottom:1px solid var(--border);font-size:.88rem}
+.file-list li:last-child{border-bottom:none}
+.file-list .nm{word-break:break-all}
+.file-list .sz{color:var(--muted);font-size:.78rem;white-space:nowrap;margin-left:.5rem}
+.summary{font-size:.82rem;color:var(--muted);padding-top:.25rem}
+.text-block{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem 1.1rem;width:100%;text-align:left;display:flex;flex-direction:column;gap:.6rem}
 .text-content{font-size:.95rem;line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow-y:auto;color:var(--text)}
 .text-meta{font-size:.8rem;color:var(--muted)}
 .btn{border:none;border-radius:8px;padding:.75rem 1.5rem;font-size:.95rem;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;text-decoration:none;display:inline-flex;align-items:center;gap:.5rem;transition:background .18s;width:100%;justify-content:center}
 .btn:hover{background:var(--primary-h)}
 .btn.success{background:var(--success)}
+.btn-row{display:flex;flex-direction:column;gap:.6rem;width:100%}
 .waiting{color:var(--muted);font-size:.9rem;line-height:1.6}
 </style>
 </head>
@@ -42,15 +47,39 @@ h1{font-size:1.2rem;font-weight:600}
 
   {{else if (eq .Mode .ModeFile)}}
   <svg class="icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+
+  {{if eq .FileCount 1}}
   <h1>File ready</h1>
   <div class="file-block">
-    <div class="file-name">{{.FileName}}</div>
-    <div class="file-size">{{.FileSize}}</div>
+    {{range .Files}}
+    <div style="font-weight:600;word-break:break-all">{{.Name}}</div>
+    <div style="font-size:.85rem;color:var(--muted)">{{humanSize .Size}}</div>
+    {{end}}
   </div>
-  <a class="btn" href="/download">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    Download
-  </a>
+  <div class="btn-row">
+    <a class="btn" href="/download/0">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download
+    </a>
+  </div>
+
+  {{else}}
+  <h1>{{.FileCount}} files ready</h1>
+  <div class="file-block">
+    <ul class="file-list">
+      {{range .Files}}
+      <li><span class="nm">{{.Name}}</span><span class="sz">{{humanSize .Size}}</span></li>
+      {{end}}
+    </ul>
+    <div class="summary">{{.TotalSize}} total · will be downloaded as {{.ZipName}}</div>
+  </div>
+  <div class="btn-row">
+    <a class="btn" href="/download-zip">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download all as ZIP
+    </a>
+  </div>
+  {{end}}
 
   {{else if (eq .Mode .ModeText)}}
   <svg class="icon" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -68,7 +97,7 @@ h1{font-size:1.2rem;font-weight:600}
 </div>
 <script>
 function clipboardWrite(text, btn) {
-  const origHTML = btn ? btn.innerHTML : null;
+  var origHTML = btn ? btn.innerHTML : null;
   function onSuccess() {
     if (!btn) return;
     btn.classList.add('success');
@@ -80,26 +109,19 @@ function clipboardWrite(text, btn) {
     ta.value = text;
     ta.style.cssText = 'position:fixed;top:0;left:0;width:2em;height:2em;padding:0;border:none;outline:none;background:transparent;opacity:0.01;z-index:9999';
     document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    ta.setSelectionRange(0, ta.value.length);
-    var ok = false;
-    try { ok = document.execCommand('copy'); } catch(e) {}
+    ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+    var ok = false; try { ok = document.execCommand('copy'); } catch(e) {}
     document.body.removeChild(ta);
     if (ok) onSuccess();
   }
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(onSuccess).catch(execFallback);
-  } else {
-    execFallback();
-  }
+  } else { execFallback(); }
 }
-
 var copyBtn = document.getElementById('copyBtn');
 if (copyBtn) {
   copyBtn.addEventListener('click', function() {
-    var text = document.getElementById('textContent').textContent;
-    clipboardWrite(text, copyBtn);
+    clipboardWrite(document.getElementById('textContent').textContent, copyBtn);
   });
 }
 </script>
