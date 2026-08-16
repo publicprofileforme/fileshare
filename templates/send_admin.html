@@ -94,9 +94,9 @@ hr{border:none;border-top:1px solid var(--border)}
     <div class="url-label">Share link</div>
     {{range .IPs}}
     {{if eq $.FileCount 1}}
-    <div class="url-box" onclick="copyURL(this)" title="Click to copy">http://{{.}}:{{$.ClientPort}}/download/0</div>
+    <div class="url-box" onclick="copyURL(this)" title="Click to copy">http://{{.IP}}:{{$.ClientPort}}/download/0</div>
     {{else}}
-    <div class="url-box" onclick="copyURL(this)" title="Click to copy">http://{{.}}:{{$.ClientPort}}/download-zip</div>
+    <div class="url-box" onclick="copyURL(this)" title="Click to copy">http://{{.IP}}:{{$.ClientPort}}/download-zip</div>
     {{end}}
     {{end}}
     {{if not .Headless}}

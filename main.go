@@ -27,10 +27,14 @@ import (
 //go:embed templates/*
 var templateFS embed.FS
 
+type ifaceIP struct {
+	Name, IP string
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-func localIPs() []string {
-	var ips []string
+func localIFs() []ifaceIP {
+	var ifs []ifaceIP
 	ifaces, _ := net.Interfaces()
 	for _, iface := range ifaces {
 		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
@@ -46,11 +50,11 @@ func localIPs() []string {
 				ip = v.IP
 			}
 			if ip != nil && !ip.IsLoopback() && ip.To4() != nil {
-				ips = append(ips, ip.String())
+				ifs = append(ifs, ifaceIP{Name: iface.Name, IP: ip.String()})
 			}
 		}
 	}
-	return ips
+	return ifs
 }
 
 func humanSize(n int64) string {
@@ -100,7 +104,7 @@ func sanitizeRelPath(rel string) string {
 const cookieName = "fs_session"
 
 type auth struct {
-	password string        // empty = disabled
+	password string // empty = disabled
 	mu       sync.RWMutex
 	tokens   map[string]struct{}
 	tmpl     *template.Template
@@ -235,18 +239,18 @@ func (s *sendState) setFiles(entries []sendFileEntry) {
 func (s *sendState) setText(text string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mode    = modeText
-	s.text    = text
-	s.files   = nil
+	s.mode = modeText
+	s.text = text
+	s.files = nil
 	s.zipName = ""
 }
 
 func (s *sendState) clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mode    = modeIdle
-	s.files   = nil
-	s.text    = ""
+	s.mode = modeIdle
+	s.files = nil
+	s.text = ""
 	s.zipName = ""
 }
 
@@ -332,7 +336,7 @@ func (srv *sendServer) registerAdminRoutes(mux *http.ServeMux) {
 		}
 		data := map[string]interface{}{
 			"ClientPort": srv.clientPort,
-			"IPs":        localIPs(),
+			"IPs":        localIFs(),
 			"Headless":   srv.headless,
 			"Mode":       snap.Mode,
 			"ModeFile":   modeFile,
@@ -579,7 +583,7 @@ func (srv *receiveServer) registerRoutes(mux *http.ServeMux) {
 			return
 		}
 		data := map[string]interface{}{
-			"Port": srv.port, "SaveDir": srv.saveDir, "IPs": localIPs(),
+			"Port": srv.port, "SaveDir": srv.saveDir, "IPs": localIFs(),
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		srv.tmpl.ExecuteTemplate(w, "receive.html", data)
@@ -670,14 +674,14 @@ func truncate(s string, n int) string {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 func main() {
-	sendPort    := flag.Int("send-port",    8080, "client download port (all interfaces)")
-	adminPort   := flag.Int("admin-port",   8081, "admin UI port (localhost only)")
+	sendPort := flag.Int("send-port", 8080, "client download port (all interfaces)")
+	adminPort := flag.Int("admin-port", 8081, "admin UI port (localhost only)")
 	receivePort := flag.Int("receive-port", 8082, "receive/upload port (all interfaces)")
-	receiveDir  := flag.String("dir",       defaultSaveDir(), "directory for received files")
-	filePaths   := flag.String("file",      "", "comma-separated file paths to share (headless)")
-	noSend      := flag.Bool("no-send",     false, "disable send server")
-	noReceive   := flag.Bool("no-receive",  false, "disable receive server")
-	password    := flag.String("password",  "", "protect client/receive pages with a password (or use FILESHARE_PASSWORD env)")
+	receiveDir := flag.String("dir", defaultSaveDir(), "directory for received files")
+	filePaths := flag.String("file", "", "comma-separated file paths to share (headless)")
+	noSend := flag.Bool("no-send", false, "disable send server")
+	noReceive := flag.Bool("no-receive", false, "disable receive server")
+	password := flag.String("password", "", "protect client/receive pages with a password (or use FILESHARE_PASSWORD env)")
 	flag.Parse()
 
 	// Env var takes precedence if flag not set
@@ -694,8 +698,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	clientAuth   := newAuth(*password, tmpl)
-	receiveAuth  := newAuth(*password, tmpl)
+	clientAuth := newAuth(*password, tmpl)
+	receiveAuth := newAuth(*password, tmpl)
 
 	headless := *filePaths != ""
 	var servers []*http.Server
@@ -769,11 +773,7 @@ func main() {
 	}
 
 	// ── Banner ────────────────────────────────────────
-	ips := localIPs()
-	vpnIP := ""
-	if len(ips) > 0 {
-		vpnIP = ips[0]
-	}
+	ifs := localIFs()
 	fmt.Println()
 	fmt.Println("  fileshare started!")
 	fmt.Println("  ──────────────────────────────────────────────")
@@ -786,19 +786,24 @@ func main() {
 		if headless {
 			mode = "HEADLESS"
 		}
-		fmt.Printf("  [SEND]  Mode         : %s\n", mode)
-		fmt.Printf("          Admin (you)  : http://localhost:%d\n", *adminPort)
-		if vpnIP != "" {
-			fmt.Printf("          Client       : http://%s:%d\n", vpnIP, *sendPort)
+		fmt.Printf("[SEND]    Mode: %s\n", mode)
+		fmt.Printf("          Admin (you): http://localhost:%d\n", *adminPort)
+		if len(ifs) > 0 {
+			for _, ip := range ifs {
+				fmt.Printf("          Client: http://%s:%d          Interface: %q\n", ip.IP, *sendPort, ip.Name)
+			}
 		}
 	}
 	if !*noReceive {
 		fmt.Println("  ──────────────────────────────────────────────")
-		if vpnIP != "" {
-			fmt.Printf("  [RECV]  Upload URL   : http://%s:%d\n", vpnIP, *receivePort)
+		if len(ifs) > 0 {
+			fmt.Println("[RECV]")
+			for _, ip := range ifs {
+				fmt.Printf("          Upload URL: http://%s:%d          Interface: %q\n", ip.IP, *receivePort, ip.Name)
+			}
 		}
-		fmt.Printf("          Localhost    : http://localhost:%d\n", *receivePort)
-		fmt.Printf("          Save dir     : %s\n", *receiveDir)
+		fmt.Printf("          Localhost: http://localhost:%d\n", *receivePort)
+		fmt.Printf("          Save dir: %s\n", *receiveDir)
 	}
 	fmt.Println("  ──────────────────────────────────────────────")
 	fmt.Println("  Stop: Ctrl+C")

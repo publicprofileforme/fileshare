@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ---
 
+## [1.3.0] — 2026-08-15
+
+### Changed
+- Improved startup network discovery: the banner now prints all discovered local addresses together with their interface names, so multi-interface hosts such as Hyper-V NAT, Docker, WSL, and VPN adapters are visible and easier to identify
+- Reduced confusion around local access URLs on machines with multiple active adapters by showing which address belongs to which interface
+
+---
+
 ## [1.3.0] — 2026-05-24
 
 ### Added
